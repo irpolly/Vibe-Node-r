@@ -21,7 +21,6 @@ class Agent:
         self.config = config
         self.session = session
         self.role = config.get('role', 'Unnamed Agent')
-        self.model = None
         
         # Lazy initialization of the Gemini client, done only once.
         if not Agent._is_configured and not Agent._initialization_error:
@@ -30,16 +29,11 @@ class Agent:
                 if not api_key:
                     raise ValueError("API_KEY environment variable not set or empty.")
                 genai.configure(api_key=api_key)
-                # Test the configuration by creating a model instance
-                genai.GenerativeModel(MODEL_NAME)
                 Agent._is_configured = True
                 print("✅ Gemini API configured successfully.")
             except Exception as e:
                 Agent._initialization_error = f"Failed to configure Gemini API: {e}. Ensure the API_KEY is set correctly in your Cloud Run service."
                 print(f"❌ {Agent._initialization_error}")
-        
-        if Agent._is_configured:
-            self.model = genai.GenerativeModel(MODEL_NAME)
 
     async def think(self, duration_s: float = 1.0):
         """Simulates the agent 'thinking' or processing."""
@@ -54,12 +48,14 @@ class Agent:
         """Generates a response using the Gemini API, or returns an error if misconfigured."""
         if self._initialization_error:
             return self._initialization_error
-        if not self.model:
-             return "Gemini API client is not available."
+        if not Agent._is_configured:
+             return "Gemini API client is not configured."
 
         try:
+            # Just-in-time model instantiation
+            model = genai.GenerativeModel(MODEL_NAME)
             full_prompt = f"You are an AI agent acting as a {self.role} in a team. Your personality should be professional but concise. Based on the following prompt, provide your response or update in 1-2 sentences.\n\nPROMPT: \"{prompt}\""
-            response = await self.model.generate_content_async(full_prompt)
+            response = await model.generate_content_async(full_prompt)
             return response.text.strip()
         except Exception as e:
             error_text = f"Error generating response: {e}"
@@ -125,7 +121,7 @@ class CoderAgent(Agent):
         """Generates the final HTML game file using the Gemini API."""
         if self._initialization_error:
             return f"<html><body>{self._initialization_error}</body></html>"
-        if not self.model:
+        if not Agent._is_configured:
             return "<html><body>Gemini API client is not available. Cannot generate code.</body></html>"
 
         prompt = f"""
@@ -142,7 +138,9 @@ class CoderAgent(Agent):
         Generate the HTML file now. Ensure the output is ONLY the HTML code, starting with <!DOCTYPE html>.
         """
         try:
-            response = await self.model.generate_content_async(prompt)
+            # Just-in-time model instantiation
+            model = genai.GenerativeModel(MODEL_NAME)
+            response = await model.generate_content_async(prompt)
             text = response.text.strip()
             if '```html' in text:
                 text = text.split('```html')[1]

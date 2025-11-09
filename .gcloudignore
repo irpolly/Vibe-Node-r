@@ -1,0 +1,41 @@
+
+# This file tells gcloud to ignore these files and directories when uploading source.
+# It prevents uploading local caches, virtual environments, and IDE settings.
+
+.gcloudignore
+.git
+.gitignore
+
+# Node.js
+node_modules/
+.npm/
+.npmrc
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# IDE / Editor specific
+.vscode/
+.idea/
+.DS_Store
+
+# Cloud Shell / Local User Dirs
+.cache/
+.codeoss/
+.config/
+.docker/
+is-it-ai-grok/
+README-cloudshell.txt
+.bash_history
+.bash_logout
+.bashrc
+.profile
+.sudo_as_admin_successful

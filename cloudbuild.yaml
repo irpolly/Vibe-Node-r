@@ -26,3 +26,7 @@ steps:
 # This is what Cloud Run will use to deploy.
 images:
   - 'europe-west4-docker.pkg.dev/${PROJECT_ID}/vibe-coder-repo/vibe-node-r-backend:latest'
+
+# This option fixes the "logs_bucket" permission error.
+options:
+  logging: CLOUD_LOGGING_ONLY
