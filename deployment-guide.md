@@ -1,78 +1,63 @@
 
-# Vibe Node(r): The Definitive Backend Deployment Guide
+# Vibe Node(r): Backend Deployment Guide for Google Cloud Run
 
-This guide provides the single, most reliable method to deploy your Python backend to Google Cloud Run. Follow these steps exactly.
+This guide provides the definitive, most reliable method to deploy your Python backend to Google Cloud Run using a repository-based workflow.
 
-## Step 1: Initial Setup (Do This Once)
+## The Problem: Build Failures
 
-If you have already done these steps, you can skip to Step 2.
+You have encountered two common build failures:
+1.  **"main.py not found"**: This happens because your backend code is in a subdirectory (`is-it-ai-grok/backend/`), but Cloud Build looks for it at the root by default.
+2.  **"logs_bucket" permission error**: This happens because the service account running the build doesn't have permission to write logs to the default Cloud Storage bucket.
 
-1.  **Authenticate gcloud**:
-    ```bash
-    gcloud auth login
-    ```
-2.  **Set Your Project**:
-    ```bash
-    gcloud config set project [YOUR_PROJECT_ID]
-    ```
-    (Replace `[YOUR_PROJECT_ID]` with `cloud-run-hackathon-477510`)
+## The Solution: `cloudbuild.yaml`
 
-3.  **Enable APIs (CRITICAL STEP)**:
-    This command enables all necessary services, including the Generative Language API.
-    ```bash
-    gcloud services enable run.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com generativelanguage.googleapis.com
-    ```
-4.  **Create API Key Secret**:
-    ```bash
-    gcloud secrets create gemini-api-key --replication-policy="automatic"
-    printf "[YOUR_API_KEY]" | gcloud secrets versions add gemini-api-key --data-file=-
-    ```
-    (Replace `[YOUR_API_KEY]` with your actual key)
-
-5.  **Grant Secret Access**:
-    ```bash
-    export PROJECT_NUMBER=$(gcloud projects describe $(gcloud config get-value project) --format='value(projectNumber)')
-    gcloud secrets add-iam-policy-binding gemini-api-key \
-      --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
-      --role="roles/secretmanager.secretAccessor"
-    ```
+The solution to both problems is to add a `cloudbuild.yaml` file to the **root** of your repository. This file gives Cloud Build explicit instructions to solve both issues:
+1.  It tells Cloud Build to first change its working directory into `is-it-ai-grok/backend/`.
+2.  It tells Cloud Build to send logs directly to Cloud Logging, bypassing the need for storage permissions.
 
 ---
 
-## Step 2: The Golden Command (Deploy Your Backend)
+## Deployment Steps
 
-This is the only command you need to deploy your service. It builds the code from your local machine and deploys it, bypassing any GitHub issues.
+### Step 1: Create and Push `cloudbuild.yaml`
 
-1.  **Navigate to Your Backend Directory**: Open your terminal and `cd` into the folder that contains your `main.py`, `Dockerfile`, and other backend files.
+1.  In your project, go to the **root directory** (the same level as your `is-it-ai-grok` folder).
+2.  Create a new file named exactly `cloudbuild.yaml`.
+3.  Copy the content for `cloudbuild.yaml` provided in the changes.
+4.  Commit and push this new file to your GitHub repository.
 
-2.  **Run the Command**: Copy and paste the following command into your terminal. **Replace `[YOUR_PROJECT_ID]` with your actual project ID.**
+```bash
+git add cloudbuild.yaml
+git commit -m "FIX: Add cloudbuild.yaml to fix deployment"
+git push
+```
 
-    ```bash
-    gcloud run deploy vibe-node-r \
-        --source . \
-        --platform managed \
-        --region europe-west4 \
-        --allow-unauthenticated \
-        --set-env-vars="API_KEY=SECRET:gemini-api-key:latest"
-    ```
+**That's it!** Pushing this file will trigger a new build in Cloud Run. This time, it will find the instructions in `cloudbuild.yaml` and succeed.
 
-After this command succeeds, your backend will be live and correctly configured. The frontend is already set up to use the correct URL, so the application should work immediately.
+### Step 2: Verify the Live Service
+
+After the deployment succeeds, your service will be live. If you still encounter an `API_KEY not set` error in the application UI, it means the secret was not attached correctly during a previous deployment attempt. You can fix this by running the "Golden Command" below from your local machine.
+
+**The Golden Command (for fixing secret configuration)**
+
+This command forces a new revision with the correct secret settings.
+1.  Navigate your terminal to the `is-it-ai-grok/backend` directory.
+2.  Run the command, replacing `[YOUR_PROJECT_ID]` with your actual project ID.
+
+```bash
+gcloud run deploy vibe-node-r \
+    --source . \
+    --platform managed \
+    --region europe-west4 \
+    --allow-unauthenticated \
+    --set-env-vars="API_KEY=SECRET:gemini-api-key:latest"
+```
 
 ---
+## Initial Setup Checklist (One-Time)
 
-## Troubleshooting
+Ensure these steps have been completed in your Google Cloud project.
 
-### ERROR: "API key not valid"
-
-This error comes directly from Google's servers. It means your application is running correctly but the API key itself is the problem.
-
-*   **Cause 1: Generative Language API is not enabled.** This is the most likely cause.
-    *   **Solution**: Run the command from Step 1.3 of this guide: `gcloud services enable generativelanguage.googleapis.com`. Then, redeploy your service using the Golden Command.
-*   **Cause 2: The secret value is incorrect.** You may have made a typo when creating the secret.
-    *   **Solution**: Update the secret with the correct key by running `printf "[YOUR_CORRECT_API_KEY]" | gcloud secrets versions add gemini-api-key --data-file=-`. Then, you must redeploy your Cloud Run service using the Golden Command to make it pick up the `latest` version of the secret.
-
-### ERROR: "Container failed to start"
-
-This means your application crashed instantly.
-*   **Cause**: The most common cause is that your local `Dockerfile` still contains the line `ENV API_KEY=""`.
-*   **Solution**: Open your local `Dockerfile`, delete that line, save the file, and re-run the Golden Command from Step 2.
+1.  **IAM Permissions**: Your Cloud Run service account (`[PROJECT_NUMBER]-compute@developer.gserviceaccount.com`) must have the **`Secret Manager Secret Accessor`** role.
+2.  **APIs Enabled**: `run.googleapis.com`, `cloudbuild.googleapis.com`, `secretmanager.googleapis.com`, `generativelanguage.googleapis.com`.
+3.  **Secret Created**: A secret named `gemini-api-key` must exist with your API key as its value.

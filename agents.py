@@ -13,27 +13,13 @@ MODEL_NAME = "gemini-1.5-flash"
 # --- Base Agent Class ---
 class Agent:
     """Base class for all agents in the system."""
-    _is_configured = False
-    _initialization_error = None
 
     def __init__(self, node_id: str, config: Dict[str, Any], session: 'Session'):
         self.node_id = node_id
         self.config = config
         self.session = session
         self.role = config.get('role', 'Unnamed Agent')
-        
-        # Lazy initialization of the Gemini client, done only once.
-        if not Agent._is_configured and not Agent._initialization_error:
-            try:
-                api_key = os.environ.get("API_KEY")
-                if not api_key:
-                    raise ValueError("API_KEY environment variable not set or empty.")
-                genai.configure(api_key=api_key)
-                Agent._is_configured = True
-                print("✅ Gemini API configured successfully.")
-            except Exception as e:
-                Agent._initialization_error = f"Failed to configure Gemini API: {e}. Ensure the API_KEY is set correctly in your Cloud Run service."
-                print(f"❌ {Agent._initialization_error}")
+        # The model will be instantiated just-in-time in the async methods
 
     async def think(self, duration_s: float = 1.0):
         """Simulates the agent 'thinking' or processing."""
@@ -45,14 +31,9 @@ class Agent:
         self.session.add_message(self.role, text)
 
     async def generate_response(self, prompt: str) -> str:
-        """Generates a response using the Gemini API, or returns an error if misconfigured."""
-        if self._initialization_error:
-            return self._initialization_error
-        if not Agent._is_configured:
-             return "Gemini API client is not configured."
-
+        """Generates a response using the Gemini API."""
         try:
-            # Just-in-time model instantiation
+            # Just-in-time model instantiation ensures it's in the correct event loop
             model = genai.GenerativeModel(MODEL_NAME)
             full_prompt = f"You are an AI agent acting as a {self.role} in a team. Your personality should be professional but concise. Based on the following prompt, provide your response or update in 1-2 sentences.\n\nPROMPT: \"{prompt}\""
             response = await model.generate_content_async(full_prompt)
@@ -119,11 +100,6 @@ class CoderAgent(Agent):
 
     async def _generate_final_code(self, conversation: str, vibe: str) -> str:
         """Generates the final HTML game file using the Gemini API."""
-        if self._initialization_error:
-            return f"<html><body>{self._initialization_error}</body></html>"
-        if not Agent._is_configured:
-            return "<html><body>Gemini API client is not available. Cannot generate code.</body></html>"
-
         prompt = f"""
         Based on the following development team conversation and the initial "vibe", act as an expert frontend developer.
         Your task is to generate a complete, single-file HTML document that implements the described game.
