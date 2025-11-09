@@ -5,12 +5,13 @@
 steps:
   # Step 1: Build the container image from the 'backend' subdirectory
   - name: 'gcr.io/cloud-builders/docker'
-    # Change the working directory to where the Dockerfile is located
+    # This is the crucial instruction: change the working directory
+    # to where the Dockerfile is located before running the build.
     dir: 'is-it-ai-grok/backend'
     args:
       - 'build'
       - '-t'
-      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/vibe-coder-repo/vibe-node-r-backend:latest'
+      - 'europe-west4-docker.pkg.dev/${PROJECT_ID}/vibe-coder-repo/vibe-node-r-backend:latest'
       - '.'
     id: 'Build'
 
@@ -18,15 +19,10 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/vibe-coder-repo/vibe-node-r-backend:latest'
+      - 'europe-west4-docker.pkg.dev/${PROJECT_ID}/vibe-coder-repo/vibe-node-r-backend:latest'
     id: 'Push'
 
 # Define the final image that was built.
 # This is what Cloud Run will use to deploy.
 images:
-  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/vibe-coder-repo/vibe-node-r-backend:latest'
-
-# Default substitutions provided by the Cloud Run trigger.
-# You can add your own here if needed.
-substitutions:
-  _REGION: 'europe-west4'
+  - 'europe-west4-docker.pkg.dev/${PROJECT_ID}/vibe-coder-repo/vibe-node-r-backend:latest'
