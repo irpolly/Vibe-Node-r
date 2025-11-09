@@ -1,63 +1,66 @@
 
-# Vibe Node(r): Backend Deployment Guide for Google Cloud Run
+# Vibe Node(r): Final Deployment Guide
 
-This guide provides the definitive, most reliable method to deploy your Python backend to Google Cloud Run using a repository-based workflow.
+This guide provides the definitive method to deploy your unified frontend and backend application to Google Cloud Run.
 
-## The Problem: Build Failures
+## Architecture Overview
 
-You have encountered two common build failures:
-1.  **"main.py not found"**: This happens because your backend code is in a subdirectory (`is-it-ai-grok/backend/`), but Cloud Build looks for it at the root by default.
-2.  **"logs_bucket" permission error**: This happens because the service account running the build doesn't have permission to write logs to the default Cloud Storage bucket.
-
-## The Solution: `cloudbuild.yaml`
-
-The solution to both problems is to add a `cloudbuild.yaml` file to the **root** of your repository. This file gives Cloud Build explicit instructions to solve both issues:
-1.  It tells Cloud Build to first change its working directory into `is-it-ai-grok/backend/`.
-2.  It tells Cloud Build to send logs directly to Cloud Logging, bypassing the need for storage permissions.
+Your application is now a single, self-contained service. The `Dockerfile` uses a **multi-stage build** to achieve this:
+1.  **Stage 1 (Node.js)**: It builds your React frontend into a folder of static files (`build/`).
+2.  **Stage 2 (Python)**: It copies the static files from Stage 1 into the final Python container.
+3.  **Result**: The Python Flask server runs, serving both the static frontend files (your app's UI) and the backend API (`/api/...`) from the same container. This eliminates all CORS issues and simplifies deployment.
 
 ---
 
 ## Deployment Steps
 
-### Step 1: Create and Push `cloudbuild.yaml`
+### Step 1: Initial Setup (Do This Once)
 
-1.  In your project, go to the **root directory** (the same level as your `is-it-ai-grok` folder).
-2.  Create a new file named exactly `cloudbuild.yaml`.
-3.  Copy the content for `cloudbuild.yaml` provided in the changes.
-4.  Commit and push this new file to your GitHub repository.
+If you have already done these steps, you can skip to Step 2.
 
-```bash
-git add cloudbuild.yaml
-git commit -m "FIX: Add cloudbuild.yaml to fix deployment"
-git push
-```
-
-**That's it!** Pushing this file will trigger a new build in Cloud Run. This time, it will find the instructions in `cloudbuild.yaml` and succeed.
-
-### Step 2: Verify the Live Service
-
-After the deployment succeeds, your service will be live. If you still encounter an `API_KEY not set` error in the application UI, it means the secret was not attached correctly during a previous deployment attempt. You can fix this by running the "Golden Command" below from your local machine.
-
-**The Golden Command (for fixing secret configuration)**
-
-This command forces a new revision with the correct secret settings.
-1.  Navigate your terminal to the `is-it-ai-grok/backend` directory.
-2.  Run the command, replacing `[YOUR_PROJECT_ID]` with your actual project ID.
-
-```bash
-gcloud run deploy vibe-node-r \
-    --source . \
-    --platform managed \
-    --region europe-west4 \
-    --allow-unauthenticated \
-    --set-env-vars="API_KEY=SECRET:gemini-api-key:latest"
-```
+1.  **Authenticate gcloud**: `gcloud auth login`
+2.  **Set Project**: `gcloud config set project [YOUR_PROJECT_ID]`
+3.  **Enable APIs**: `gcloud services enable run.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com generativelanguage.googleapis.com`
+4.  **Create API Key Secret**:
+    ```bash
+    gcloud secrets create gemini-api-key --replication-policy="automatic"
+    printf "[YOUR_API_KEY]" | gcloud secrets versions add gemini-api-key --data-file=-
+    ```
+5.  **Grant Secret Access**:
+    ```bash
+    export PROJECT_NUMBER=$(gcloud projects describe $(gcloud config get-value project) --format='value(projectNumber)')
+    gcloud secrets add-iam-policy-binding gemini-api-key \
+      --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+      --role="roles/secretmanager.secretAccessor"
+    ```
 
 ---
-## Initial Setup Checklist (One-Time)
 
-Ensure these steps have been completed in your Google Cloud project.
+## Step 2: The Golden Command (Deploy Everything)
 
-1.  **IAM Permissions**: Your Cloud Run service account (`[PROJECT_NUMBER]-compute@developer.gserviceaccount.com`) must have the **`Secret Manager Secret Accessor`** role.
-2.  **APIs Enabled**: `run.googleapis.com`, `cloudbuild.googleapis.com`, `secretmanager.googleapis.com`, `generativelanguage.googleapis.com`.
-3.  **Secret Created**: A secret named `gemini-api-key` must exist with your API key as its value.
+This single command builds and deploys your entire unified application.
+
+1.  **Navigate to Your Project's Root Directory**: Open your terminal and `cd` into the top-level folder that contains your `Dockerfile`, `package.json`, and `main.py`.
+
+2.  **Run the Command**: Copy and paste the following command into your terminal. **Replace `[YOUR_PROJECT_ID]` with your actual project ID.**
+
+    ```bash
+    gcloud run deploy vibe-node-r \
+        --source . \
+        --platform managed \
+        --region europe-west4 \
+        --allow-unauthenticated \
+        --set-env-vars="API_KEY=SECRET:gemini-api-key:latest"
+    ```
+
+After this command succeeds, your backend and frontend will be live at the same public URL.
+
+---
+
+## Troubleshooting
+
+### ERROR: "Container failed to start"
+
+This means your application crashed instantly.
+*   **Cause**: The most common cause is an issue with the API Key. Either the IAM permission is missing, or the secret was not attached correctly.
+*   **Solution**: Carefully re-run the commands in Step 1.5 (Grant Secret Access) and Step 2 (The Golden Command) to ensure the permissions and configuration are correct. Use the "Logs URL" from the error message to see the specific error inside the container.
