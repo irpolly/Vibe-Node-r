@@ -15,7 +15,6 @@ RUN npm install
 COPY . .
 
 # Build the static files. This creates a /app/dist directory.
-# Build the static files
 RUN npm run build
 
 # --- Stage 2: Build the Python Backend ---
@@ -37,9 +36,6 @@ COPY agents.py .
 # Copy the built frontend static files from the 'builder' stage's /app/dist directory
 # into a 'build' directory in the final container. The Python app is configured to serve from 'build'.
 COPY --from=builder /app/dist ./build
-# Copy the built frontend static files from the 'builder' stage
-# This is the key step to combine frontend and backend
-COPY --from=builder /app/build ./build
 
 # Make port 8080 available
 EXPOSE 8080

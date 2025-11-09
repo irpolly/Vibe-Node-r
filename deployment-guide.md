@@ -8,8 +8,6 @@ This guide provides the definitive method to deploy your unified frontend and ba
 Your application is now a single, self-contained service. The `Dockerfile` uses a **multi-stage build** to achieve this:
 1.  **Stage 1 (Node.js)**: It builds your React frontend into a folder of static files (`dist/`).
 2.  **Stage 2 (Python)**: It copies the static files from Stage 1 into the final Python container's `build/` directory.
-1.  **Stage 1 (Node.js)**: It builds your React frontend into a folder of static files (`build/`).
-2.  **Stage 2 (Python)**: It copies the static files from Stage 1 into the final Python container.
 3.  **Result**: The Python Flask server runs, serving both the static frontend files (your app's UI) and the backend API (`/api/...`) from the same container. This eliminates all CORS issues and simplifies deployment.
 
 ---
@@ -66,8 +64,6 @@ After this command succeeds, your backend and frontend will be live at the same 
 This error means the `Dockerfile` is trying to copy the frontend build output from the wrong directory.
 *   **Cause**: The frontend build tool (Vite) creates a `dist` directory, but the `Dockerfile` was looking for a `build` directory.
 *   **Solution**: Ensure your `Dockerfile`'s final `COPY` command is `COPY --from=builder /app/dist ./build`.
-
-### ERROR: "Container failed to start"
 
 ### ERROR: "Container failed to start"
 
