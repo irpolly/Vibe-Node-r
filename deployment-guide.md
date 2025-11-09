@@ -34,7 +34,7 @@ gcloud auth login
 # Set your project ID
 gcloud config set project [YOUR_PROJECT_ID]
 ```
-Replace `[YOUR_PROJECT_ID]` with your actual Google Cloud project ID.
+Replace `[YOUR_PROJECT_ID]` with your actual Google Cloud project ID (e.g., `cloud-run-hackathon-477510`).
 
 ### Step 2: Secure Your API Key with Secret Manager
 
@@ -49,33 +49,15 @@ gcloud secrets create gemini-api-key --replication-policy="automatic"
 printf "[YOUR_API_KEY]" | gcloud secrets versions add gemini-api-key --data-file=-
 ```
 
-### Step 2.5: Grant Secret Access (CRITICAL FIX)
-
-By default, Cloud Run cannot access Secret Manager. You must explicitly grant permission to the Cloud Run service identity.
-
-```bash
-# Get your Google Cloud Project Number
-export PROJECT_NUMBER=$(gcloud projects describe $(gcloud config get-value project) --format='value(projectNumber)')
-
-# Grant the Cloud Run service account access to the secret
-gcloud secrets add-iam-policy-binding gemini-api-key \
-  --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
-  --role="roles/secretmanager.secretAccessor"
-```
-**Note:** This command uses the default Compute Engine service account, which Cloud Run uses by default. If you use a custom service account, replace the member email accordingly.
-
 ### Step 3: Create an Artifact Registry Repository
 
 Your container image needs a place to live. We'll create a Docker repository in Artifact Registry.
 
 ```bash
-# Set your region
-export REGION=europe-west4
-
-# Create the repository
+# Create the repository in the correct region
 gcloud artifacts repositories create vibe-coder-repo \
     --repository-format=docker \
-    --location=$REGION \
+    --location=europe-west4 \
     --description="Docker repository for Vibe Node(r) app"
 ```
 
@@ -83,24 +65,25 @@ gcloud artifacts repositories create vibe-coder-repo \
 
 Navigate to the directory containing your backend files (`main.py`, `Dockerfile`, etc.). Use Cloud Build to build the container image and push it to your new Artifact Registry repository.
 
-```bash
-# Get your Project ID
-export PROJECT_ID=$(gcloud config get-value project)
+**Replace `[YOUR_PROJECT_ID]` in the command below with your actual project ID.**
 
+```bash
 # Build the image using Cloud Build
-gcloud builds submit --tag ${REGION}-docker.pkg.dev/${PROJECT_ID}/vibe-coder-repo/vibe-node-r-backend:latest
+gcloud builds submit --tag europe-west4-docker.pkg.dev/[YOUR_PROJECT_ID]/vibe-coder-repo/vibe-node-r-backend:latest
 ```
 
 ### Step 5: Deploy to Cloud Run
 
-Now, deploy the container image from Artifact Registry to Cloud Run.
+Now, deploy the container image from Artifact Registry to Cloud Run. This is the most important command.
+
+**Replace `[YOUR_PROJECT_ID]` in the command below with your actual project ID.**
 
 ```bash
-# Deploy the service
+# Deploy the service, ensuring the secret is attached
 gcloud run deploy vibe-node-r \
-    --image ${REGION}-docker.pkg.dev/${PROJECT_ID}/vibe-coder-repo/vibe-node-r-backend:latest \
+    --image europe-west4-docker.pkg.dev/[YOUR_PROJECT_ID]/vibe-coder-repo/vibe-node-r-backend:latest \
     --platform managed \
-    --region $REGION \
+    --region europe-west4 \
     --allow-unauthenticated \
     --set-env-vars="API_KEY=SECRET:gemini-api-key:latest"
 ```
@@ -122,25 +105,17 @@ Your frontend application is now fully configured to communicate with your live,
 
 ### "Container failed to start" Error
 
-This is the most common error. It means the application inside your container crashed immediately on startup. **The build log is not enough; you must check the application logs.**
+This means the application inside your container crashed immediately on startup. **You must check the application logs.**
 
 1.  Find the **Logs URL** in the error message from your failed deployment.
 2.  Click on it to open the Google Cloud Logging viewer.
 3.  Look for red error messages from your Python application. This will tell you the *exact line of code* that is causing the crash.
 
 **Common Causes:**
-*   **Missing API Key**: The `gcloud run deploy` command was run without the `--set-env-vars="API_KEY=SECRET:..."` flag, or the IAM permissions from Step 2.5 were not set correctly. The logs will show a `RuntimeError` from `agents.py`.
-*   **`ENV API_KEY` in Dockerfile**: **Do not set `ENV API_KEY=""` in your Dockerfile.** This creates a race condition where the app reads an empty key and crashes before Cloud Run can inject the real secret. Your Dockerfile should have no mention of `API_KEY`.
-*   **Missing Production Server**: Ensure `gunicorn` is listed in your `requirements.txt` file.
+*   **Missing API Key**: The `gcloud run deploy` command was run without the `--set-env-vars="API_KEY=SECRET:..."` flag, or the IAM permissions from Step 2.5 were not set correctly.
+*   **`ENV API_KEY` in Dockerfile**: **Do not set `ENV API_KEY=""` in your Dockerfile.** This creates a race condition where the app reads an empty key and crashes before Cloud Run can inject the real secret.
 
 ### "Conflict for resource" Error
 
-If your deployment fails with an error like `ABORTED: Conflict for resource...`, it means you have a deployment race condition.
-
 *   **Cause**: This happens when a new deployment is triggered while another deployment for the same service is already in progress.
 *   **Solution**: Go to the **Cloud Build > History** page in your Google Cloud Console, **cancel** any running builds, wait a minute, and then trigger a single, new build.
-
-### "Invalid Reference Format" Error
-
-*   **Cause**: Your GitHub repository name or the service name you provided contains characters that are not allowed in a Docker image tag (e.g., uppercase letters, special characters).
-*   **Solution**: Ensure your resource names adhere to these rules: lowercase letters, numbers, and hyphens only.
