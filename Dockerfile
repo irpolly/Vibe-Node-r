@@ -6,15 +6,16 @@ FROM node:20-slim as builder
 # Set the working directory
 WORKDIR /app
 
-# Copy package.json and install dependencies
-# This leverages Docker layer caching
-COPY package.json .
+# Copy package.json and package-lock.json (if available)
+COPY package*.json ./
+
+# Install dependencies. This layer is cached and only re-runs if package.json changes.
 RUN npm install
 
 # Copy the rest of the frontend source code
 COPY . .
 
-# Build the static files. This creates a /app/build directory.
+# Build the static files. This creates a /app/dist directory.
 RUN npm run build
 
 # --- Stage 2: Build the Python Backend ---
@@ -33,9 +34,9 @@ COPY main.py .
 COPY session.py .
 COPY agents.py .
 
-# Copy the built frontend static files from the 'builder' stage's /app/build directory
+# Copy the built frontend static files from the 'builder' stage's /app/dist directory
 # into a 'build' directory in the final container. The Python app is configured to serve from 'build'.
-COPY --from=builder /app/build ./build
+COPY --from=builder /app/dist ./build
 
 # Make port 8080 available
 EXPOSE 8080
