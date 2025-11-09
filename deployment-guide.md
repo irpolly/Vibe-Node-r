@@ -17,9 +17,10 @@ If you have already done these steps, you can skip to Step 2.
     ```
     (Replace `[YOUR_PROJECT_ID]` with `cloud-run-hackathon-477510`)
 
-3.  **Enable APIs**:
+3.  **Enable APIs (CRITICAL STEP)**:
+    This command enables all necessary services, including the Generative Language API.
     ```bash
-    gcloud services enable run.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com
+    gcloud services enable run.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com generativelanguage.googleapis.com
     ```
 4.  **Create API Key Secret**:
     ```bash
@@ -55,33 +56,23 @@ This is the only command you need to deploy your service. It builds the code fro
         --set-env-vars="API_KEY=SECRET:gemini-api-key:latest"
     ```
 
-**Command Breakdown:**
-*   `gcloud run deploy vibe-node-r`: Deploys a service named `vibe-node-r`.
-*   `--source .`: This is the crucial part. The `.` tells `gcloud` to use the code in your **current local directory** as the source.
-*   `--set-env-vars="API_KEY=SECRET:gemini-api-key:latest"`: This securely attaches your API key to the running service.
-
 After this command succeeds, your backend will be live and correctly configured. The frontend is already set up to use the correct URL, so the application should work immediately.
 
 ---
 
 ## Troubleshooting
 
+### ERROR: "API key not valid"
+
+This error comes directly from Google's servers. It means your application is running correctly but the API key itself is the problem.
+
+*   **Cause 1: Generative Language API is not enabled.** This is the most likely cause.
+    *   **Solution**: Run the command from Step 1.3 of this guide: `gcloud services enable generativelanguage.googleapis.com`. Then, redeploy your service using the Golden Command.
+*   **Cause 2: The secret value is incorrect.** You may have made a typo when creating the secret.
+    *   **Solution**: Update the secret with the correct key by running `printf "[YOUR_CORRECT_API_KEY]" | gcloud secrets versions add gemini-api-key --data-file=-`. Then, you must redeploy your Cloud Run service using the Golden Command to make it pick up the `latest` version of the secret.
+
 ### ERROR: "Container failed to start"
 
-This means your application crashed instantly. **You must check the application logs.**
-
-1.  Find the **Logs URL** in the error message from your failed deployment.
-2.  Click on it to open the Google Cloud Logging viewer.
-3.  Look for red error messages from your Python application. This will tell you the *exact line of code* that is causing the crash.
-
-**Common Causes:**
-*   **Missing API Key**: The `gcloud run deploy` command was run without the `--set-env-vars="API_KEY=SECRET:..."` flag, or the IAM permissions from Step 1.5 were not set correctly. The logs will show a `ValueError` from `agents.py`.
-*   **`ENV API_KEY` in Dockerfile**: **Do not set `ENV API_KEY=""` in your Dockerfile.** This creates a race condition where the app reads an empty key and crashes before Cloud Run can inject the real secret.
-*   **"Event loop is closed"**: This is an `asyncio` error. It means the Gemini API client was initialized in the wrong thread. The solution is to use "just-in-time" initialization, creating the `GenerativeModel` object inside the `async` function where it's used, not in the `__init__` constructor.
-
-### ERROR: (gcloud.run.deploy) argument --source: expected one argument
-
-If you see this error, it means you forgot the `.` at the end of the `--source` flag.
-
-*   **Incorrect**: `gcloud run deploy --source`
-*   **Correct**: `gcloud run deploy --source .`
+This means your application crashed instantly.
+*   **Cause**: The most common cause is that your local `Dockerfile` still contains the line `ENV API_KEY=""`.
+*   **Solution**: Open your local `Dockerfile`, delete that line, save the file, and re-run the Golden Command from Step 2.
