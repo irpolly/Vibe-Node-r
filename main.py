@@ -2,6 +2,7 @@
 import os
 from flask import Flask, request, jsonify, abort, send_from_directory
 from flask_cors import CORS
+from session import Session
 import uuid
 import threading
 
@@ -17,8 +18,6 @@ SESSIONS = {}
 # --- Helper Functions ---
 def get_session(session_id):
     """Retrieves a session or aborts if not found."""
-    # Defer import to prevent premature initialization issues
-    from session import Session
     session = SESSIONS.get(session_id)
     if not session:
         abort(404, description=f"Session with ID '{session_id}' not found.")
@@ -29,10 +28,7 @@ def get_session(session_id):
 def deploy_workflow():
     """
     Creates a new virtual environment (Session) for a given workflow.
-    This simulates deploying the agent configuration to a backend service.
     """
-    # Defer import to prevent premature initialization issues
-    from session import Session
     workflow_data = request.json
     if not workflow_data or 'nodes' not in workflow_data or 'edges' not in workflow_data:
         abort(400, description="Invalid workflow data provided.")
@@ -53,7 +49,7 @@ def deploy_workflow():
 def run_session():
     """
     Starts the execution of a deployed workflow with a user-provided vibe.
-    This runs the agent simulation in a background thread to not block the API.
+    This runs the agent workflow in a background thread to not block the API.
     """
     data = request.json
     session_id = data.get('workflowId')

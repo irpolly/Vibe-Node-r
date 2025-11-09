@@ -122,16 +122,25 @@ Your frontend application is now fully configured to communicate with your live,
 
 ### "Container failed to start" Error
 
-If your deployment fails with an error like `The user-provided container failed to start and listen on the port...`, it means the application inside your container crashed immediately on startup.
+This is the most common error. It means the application inside your container crashed immediately on startup. **The build log is not enough; you must check the application logs.**
 
-*   **Cause 1: Missing Production Server**: The `flask run` command is for development only. For production, a server like `gunicorn` is needed.
-    *   **Solution**: Ensure `gunicorn` is listed in your `requirements.txt` file. The `Dockerfile` is already configured to use it.
-*   **Cause 2: Premature Initialization Crash**: Your code might be trying to access resources (like environment variables) at the module level (i.e., on import). If these resources aren't ready when the container starts, the app will crash before the server can start.
-    *   **Solution**: Use a "lazy initialization" pattern. For example, configure clients like the Gemini API inside a function or class `__init__` method, not at the top of the file. **Crucially, do not set a default `ENV API_KEY=""` in your Dockerfile**, as this will cause the application to read an empty key and crash before Cloud Run can inject the real secret.
+1.  Find the **Logs URL** in the error message from your failed deployment.
+2.  Click on it to open the Google Cloud Logging viewer.
+3.  Look for red error messages from your Python application. This will tell you the *exact line of code* that is causing the crash.
+
+**Common Causes:**
+*   **Missing API Key**: The `gcloud run deploy` command was run without the `--set-env-vars="API_KEY=SECRET:..."` flag, or the IAM permissions from Step 2.5 were not set correctly. The logs will show a `RuntimeError` from `agents.py`.
+*   **`ENV API_KEY` in Dockerfile**: **Do not set `ENV API_KEY=""` in your Dockerfile.** This creates a race condition where the app reads an empty key and crashes before Cloud Run can inject the real secret. Your Dockerfile should have no mention of `API_KEY`.
+*   **Missing Production Server**: Ensure `gunicorn` is listed in your `requirements.txt` file.
+
+### "Conflict for resource" Error
+
+If your deployment fails with an error like `ABORTED: Conflict for resource...`, it means you have a deployment race condition.
+
+*   **Cause**: This happens when a new deployment is triggered while another deployment for the same service is already in progress.
+*   **Solution**: Go to the **Cloud Build > History** page in your Google Cloud Console, **cancel** any running builds, wait a minute, and then trigger a single, new build.
 
 ### "Invalid Reference Format" Error
-
-If your build fails with an error like `invalid argument ... for "-t, --tag" flag: invalid reference format`, this is almost always a naming issue.
 
 *   **Cause**: Your GitHub repository name or the service name you provided contains characters that are not allowed in a Docker image tag (e.g., uppercase letters, special characters).
 *   **Solution**: Ensure your resource names adhere to these rules: lowercase letters, numbers, and hyphens only.

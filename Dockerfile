@@ -22,6 +22,3 @@ EXPOSE 8080
 # Run main.py when the container launches using gunicorn
 # The API_KEY will be injected by the Cloud Run service from Secret Manager.
 CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 main:app
-# Note: For local testing, you can set the PORT environment variable before running the container:
-# docker run -e PORT=8080 -p 8080:8080 your-image
-

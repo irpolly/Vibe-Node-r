@@ -14,26 +14,32 @@ MODEL_NAME = "gemini-1.5-flash"
 class Agent:
     """Base class for all agents in the system."""
     _is_configured = False
+    _initialization_error = None
 
     def __init__(self, node_id: str, config: Dict[str, Any], session: 'Session'):
         self.node_id = node_id
         self.config = config
         self.session = session
         self.role = config.get('role', 'Unnamed Agent')
+        self.model = None
         
-        # Lazy initialization of the Gemini client
-        if not Agent._is_configured:
+        # Lazy initialization of the Gemini client, done only once.
+        if not Agent._is_configured and not Agent._initialization_error:
             try:
-                api_key = os.environ["API_KEY"]
+                api_key = os.environ.get("API_KEY")
                 if not api_key:
-                    raise KeyError
+                    raise ValueError("API_KEY environment variable not set or empty.")
                 genai.configure(api_key=api_key)
+                # Test the configuration with a simple call
+                genai.GenerativeModel(MODEL_NAME)
                 Agent._is_configured = True
-                print("Gemini API configured successfully.")
-            except KeyError:
-                raise RuntimeError("API_KEY environment variable not set or empty. This is required for the application to run.")
+                print("✅ Gemini API configured successfully.")
+            except Exception as e:
+                Agent._initialization_error = f"Failed to configure Gemini API: {e}. Ensure the API_KEY is set correctly in your Cloud Run service."
+                print(f"❌ {Agent._initialization_error}")
         
-        self.model = genai.GenerativeModel(MODEL_NAME)
+        if Agent._is_configured:
+            self.model = genai.GenerativeModel(MODEL_NAME)
 
     async def think(self, duration_s: float = 1.0):
         """Simulates the agent 'thinking' or processing."""
@@ -45,14 +51,20 @@ class Agent:
         self.session.add_message(self.role, text)
 
     async def generate_response(self, prompt: str) -> str:
-        """Generates a response using the Gemini API."""
+        """Generates a response using the Gemini API, or returns an error if misconfigured."""
+        if self._initialization_error:
+            return self._initialization_error
+        if not self.model:
+             return "Gemini API client is not available."
+
         try:
             full_prompt = f"You are an AI agent acting as a {self.role} in a team. Your personality should be professional but concise. Based on the following prompt, provide your response or update in 1-2 sentences.\n\nPROMPT: \"{prompt}\""
             response = await self.model.generate_content_async(full_prompt)
             return response.text.strip()
         except Exception as e:
-            print(f"Error generating response for {self.role}: {e}")
-            return f"I encountered an error while processing the request for: \"{prompt}\""
+            error_text = f"Error generating response: {e}"
+            print(f"❌ Error for {self.role}: {error_text}")
+            return f"I encountered an API error. Please check the server logs. Details: {e}"
 
     async def run(self, prompt: str):
         """The main execution method for the agent. Must be overridden."""
@@ -65,7 +77,6 @@ class ManagerAgent(Agent):
         self.speak(response)
         await self.think(1.5)
         
-        # In a real system, this would intelligently delegate. Here, we simulate a chain.
         designer = next((agent for agent in self.session.agents.values() if isinstance(agent, DesignerAgent)), None)
         coder = next((agent for agent in self.session.agents.values() if isinstance(agent, CoderAgent)), None)
 
@@ -103,6 +114,11 @@ class CoderAgent(Agent):
 
     async def _generate_final_code(self, conversation: str, vibe: str) -> str:
         """Generates the final HTML game file using the Gemini API."""
+        if self._initialization_error:
+            return f"<html><body>{self._initialization_error}</body></html>"
+        if not self.model:
+            return "<html><body>Gemini API client is not available. Cannot generate code.</body></html>"
+
         prompt = f"""
         Based on the following development team conversation and the initial "vibe", act as an expert frontend developer.
         Your task is to generate a complete, single-file HTML document that implements the described game.
@@ -119,7 +135,6 @@ class CoderAgent(Agent):
         try:
             response = await self.model.generate_content_async(prompt)
             text = response.text.strip()
-            # Clean up the response to ensure it's just the HTML code
             if '```html' in text:
                 text = text.split('```html')[1]
             if '```' in text:
@@ -127,7 +142,7 @@ class CoderAgent(Agent):
             return text.strip()
         except Exception as e:
             print(f"Error generating final code: {e}")
-            return "<html><body>Error generating game code. Please check the server logs.</body></html>"
+            return f"<html><body>Error generating game code: {e}</body></html>"
 
 class DesignerAgent(Agent):
     async def run(self, prompt: str):
