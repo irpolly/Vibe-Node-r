@@ -1,5 +1,5 @@
 
-# Vibe Coder: Backend Deployment Guide for Google Cloud Run
+# Vibe Node(r): Backend Deployment Guide for Google Cloud Run
 
 This guide provides step-by-step instructions to deploy the Python Flask backend to Google Cloud Run. This will give you a scalable, serverless HTTPS endpoint for your frontend application to interact with.
 
@@ -49,18 +49,34 @@ gcloud secrets create gemini-api-key --replication-policy="automatic"
 printf "[YOUR_API_KEY]" | gcloud secrets versions add gemini-api-key --data-file=-
 ```
 
+### Step 2.5: Grant Secret Access (CRITICAL FIX)
+
+By default, Cloud Run cannot access Secret Manager. You must explicitly grant permission to the Cloud Run service identity.
+
+```bash
+# Get your Google Cloud Project Number
+export PROJECT_NUMBER=$(gcloud projects describe $(gcloud config get-value project) --format='value(projectNumber)')
+
+# Grant the Cloud Run service account access to the secret
+gcloud secrets add-iam-policy-binding gemini-api-key \
+  --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+```
+**Note:** This command uses the default Compute Engine service account, which Cloud Run uses by default. If you use a custom service account, replace the member email accordingly.
+
 ### Step 3: Create an Artifact Registry Repository
 
 Your container image needs a place to live. We'll create a Docker repository in Artifact Registry.
 
 ```bash
-# Choose a region (e.g., us-central1)
+# Set your region
+export REGION=europe-west4
 
 # Create the repository
 gcloud artifacts repositories create vibe-coder-repo \
     --repository-format=docker \
     --location=$REGION \
-    --description="Docker repository for Vibe Coder app"
+    --description="Docker repository for Vibe Node(r) app"
 ```
 
 ### Step 4: Build and Push the Container Image
@@ -72,73 +88,30 @@ Navigate to the directory containing your backend files (`main.py`, `Dockerfile`
 export PROJECT_ID=$(gcloud config get-value project)
 
 # Build the image using Cloud Build
-gcloud builds submit --tag ${REGION}-docker.pkg.dev/${PROJECT_ID}/vibe-coder-repo/vibe-coder-backend:latest
+gcloud builds submit --tag ${REGION}-docker.pkg.dev/${PROJECT_ID}/vibe-coder-repo/vibe-node-r-backend:latest
 ```
-This command automatically finds your `Dockerfile`, builds the image in the cloud, and pushes it to the registry.
 
 ### Step 5: Deploy to Cloud Run
 
-Now, deploy the container image from Artifact Registry to Cloud Run. This command also securely mounts the API key from Secret Manager as an environment variable.
+Now, deploy the container image from Artifact Registry to Cloud Run.
 
 ```bash
 # Deploy the service
 gcloud run deploy vibe-node-r \
-    --image ${REGION}-docker.pkg.dev/${PROJECT_ID}/vibe-coder-repo/vibe-coder-backend:latest \
+    --image ${REGION}-docker.pkg.dev/${PROJECT_ID}/vibe-coder-repo/vibe-node-r-backend:latest \
     --platform managed \
     --region $REGION \
     --allow-unauthenticated \
     --set-env-vars="API_KEY=SECRET:gemini-api-key:latest"
 ```
 
-**Command Breakdown:**
-*   `gcloud run deploy vibe-node-r`: Deploys a service named `vibe-node-r`. **Note:** Service names must be all lowercase and contain only letters, numbers, and hyphens.
-*   `--image ...`: Specifies the container image you just built.
-*   `--platform managed`: Uses the fully managed Cloud Run environment.
-*   `--region $REGION`: Deploys to the region you specified.
-*   `--allow-unauthenticated`: **IMPORTANT**: This makes your API public. For a production app, you would set up authentication. For this hackathon, it's the simplest way to allow your frontend to call it.
-*   `--set-env-vars="API_KEY=SECRET:gemini-api-key:latest"`: This is the crucial part for security. It tells Cloud Run to fetch the latest version of the `gemini-api-key` secret from Secret Manager and mount it as an environment variable named `API_KEY` inside your container. Your Python code (`os.environ["API_KEY"]`) will then be able to access it securely.
-
 ### Step 6: Update Your Frontend
 
 After the deployment command finishes, it will output the **Service URL**. It will look something like this:
-`https://vibe-node-r-xxxxxxxxxx-uc.a.run.app`
+`https://vibe-node-r-xxxxxxxxxx-ew.a.run.app`
 
 1.  Copy this URL.
 2.  Open your frontend code and go to the file `services/adkApi.ts`.
 3.  Replace the placeholder `"[YOUR_CLOUD_RUN_SERVICE_URL]"` with your actual service URL.
 
-**Example:**
-```typescript
-// Before
-const API_BASE_URL = "[YOUR_CLOUD_RUN_SERVICE_URL]";
-
-// After
-const API_BASE_URL = "https://vibe-node-r-xxxxxxxxxx-uc.a.run.app";
-```
-
 Your frontend application is now fully configured to communicate with your live, scalable, and secure backend running on Google Cloud Run.
-
----
-
-## Troubleshooting
-
-### "Container failed to start" Error
-
-If your deployment fails with an error like `The user-provided container failed to start and listen on the port...`, it means the application inside your container crashed.
-
-*   **Cause**: This often happens because a production web server is not installed. The `flask run` command is for development only. For production, a server like `gunicorn` is needed.
-*   **Solution**: Ensure `gunicorn` is listed in your `requirements.txt` file. The `Dockerfile` is already configured to use it.
-
-### "Invalid Reference Format" Error
-
-If your build fails with an error like `invalid argument ... for "-t, --tag" flag: invalid reference format`, this is almost always a naming issue.
-
-*   **Cause**: Cloud services (including Cloud Build and Docker) have strict naming conventions for resources like repositories and services. Your GitHub repository name might contain characters that are not allowed in a Docker image tag, such as uppercase letters or trailing hyphens.
-*   **Solution**: Ensure your resource names (like your GitHub repo name if using "Build from repository", or the service name in the `gcloud run deploy` command) adhere to these rules:
-    *   Must contain only **lowercase letters, numbers, and hyphens**.
-    *   Must start with a letter.
-    *   Must not end with a hyphen.
-
-**Example:**
-*   **Invalid Name**: `Vibe-Node-r-`
-*   **Valid Name**: `vibe-node-r`
