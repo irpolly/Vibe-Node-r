@@ -30,7 +30,7 @@ class Agent:
                 if not api_key:
                     raise ValueError("API_KEY environment variable not set or empty.")
                 genai.configure(api_key=api_key)
-                # Test the configuration with a simple call
+                # Test the configuration by creating a model instance
                 genai.GenerativeModel(MODEL_NAME)
                 Agent._is_configured = True
                 print("✅ Gemini API configured successfully.")
@@ -77,17 +77,26 @@ class ManagerAgent(Agent):
         self.speak(response)
         await self.think(1.5)
         
+        # Dynamically find and run agents from the session
+        writer = next((agent for agent in self.session.agents.values() if isinstance(agent, WriterAgent)), None)
         designer = next((agent for agent in self.session.agents.values() if isinstance(agent, DesignerAgent)), None)
         coder = next((agent for agent in self.session.agents.values() if isinstance(agent, CoderAgent)), None)
+        tester = next((agent for agent in self.session.agents.values() if isinstance(agent, TesterAgent)), None)
 
+        if writer:
+            await writer.run(f"Draft a short backstory for a game with the vibe: '{prompt}'")
+        
         if designer:
             await designer.run(f"Create visual concepts for a game with the vibe: '{prompt}'")
         
         if coder:
             await coder.run(f"Develop the core game logic based on the vibe: '{prompt}'")
         
+        if tester:
+            await tester.run("Perform a quick test on the initial code from the Coder.")
+
         await self.think(1)
-        final_response = await self.generate_response("Acknowledge the team's progress and tell the Coder to finalize the code.")
+        final_response = await self.generate_response("Acknowledge the team's progress and tell the Coder to finalize the code artifact.")
         self.speak(final_response)
 
 class CoderAgent(Agent):
@@ -100,7 +109,7 @@ class CoderAgent(Agent):
         self.speak(response_2)
         await self.think(2)
 
-        response_3 = await self.generate_response("A tester found a bug with infinite jumping. Explain how you'll fix it.")
+        response_3 = await self.generate_response("A tester found a bug. Explain how you'll fix it.")
         self.speak(response_3)
         await self.think(1.5)
 
