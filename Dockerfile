@@ -19,10 +19,6 @@ COPY . .
 # 8080 is the default.
 EXPOSE 8080
 
-# Define environment variable for the API key
-# This should be set in the Cloud Run service configuration for security.
-ENV API_KEY=""
-
-# Run main.py when the container launches
-# Use gunicorn for a production-ready server
+# Run main.py when the container launches using gunicorn
+# The API_KEY will be injected by the Cloud Run service from Secret Manager.
 CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 main:app

@@ -32,7 +32,7 @@ First, authenticate your local gcloud CLI with your Google Account and set your 
 gcloud auth login
 
 # Set your project ID
-gcloud config set project [cloud-run-hackathon-477510]
+gcloud config set project [YOUR_PROJECT_ID]
 ```
 Replace `[YOUR_PROJECT_ID]` with your actual Google Cloud project ID.
 
@@ -55,13 +55,12 @@ Your container image needs a place to live. We'll create a Docker repository in 
 
 ```bash
 # Choose a region (e.g., us-central1)
-export REGION=europe-west4
 
 # Create the repository
 gcloud artifacts repositories create vibe-coder-repo \
     --repository-format=docker \
     --location=$REGION \
-    --description="Docker repository for Vibe Noder app"
+    --description="Docker repository for Vibe Coder app"
 ```
 
 ### Step 4: Build and Push the Container Image
@@ -83,7 +82,7 @@ Now, deploy the container image from Artifact Registry to Cloud Run. This comman
 
 ```bash
 # Deploy the service
-gcloud run deploy vibe-coder-backend \
+gcloud run deploy vibe-node-r \
     --image ${REGION}-docker.pkg.dev/${PROJECT_ID}/vibe-coder-repo/vibe-coder-backend:latest \
     --platform managed \
     --region $REGION \
@@ -92,7 +91,7 @@ gcloud run deploy vibe-coder-backend \
 ```
 
 **Command Breakdown:**
-*   `gcloud run deploy vibe-coder-backend`: Deploys a service named `vibe-coder-backend`.
+*   `gcloud run deploy vibe-node-r`: Deploys a service named `vibe-node-r`. **Note:** Service names must be all lowercase and contain only letters, numbers, and hyphens.
 *   `--image ...`: Specifies the container image you just built.
 *   `--platform managed`: Uses the fully managed Cloud Run environment.
 *   `--region $REGION`: Deploys to the region you specified.
@@ -102,7 +101,7 @@ gcloud run deploy vibe-coder-backend \
 ### Step 6: Update Your Frontend
 
 After the deployment command finishes, it will output the **Service URL**. It will look something like this:
-`https://vibe-coder-backend-xxxxxxxxxx-uc.a.run.app`
+`https://vibe-node-r-xxxxxxxxxx-uc.a.run.app`
 
 1.  Copy this URL.
 2.  Open your frontend code and go to the file `services/adkApi.ts`.
@@ -114,7 +113,32 @@ After the deployment command finishes, it will output the **Service URL**. It wi
 const API_BASE_URL = "[YOUR_CLOUD_RUN_SERVICE_URL]";
 
 // After
-const API_BASE_URL = "https://vibe-coder-backend-xxxxxxxxxx-uc.a.run.app";
+const API_BASE_URL = "https://vibe-node-r-xxxxxxxxxx-uc.a.run.app";
 ```
 
 Your frontend application is now fully configured to communicate with your live, scalable, and secure backend running on Google Cloud Run.
+
+---
+
+## Troubleshooting
+
+### "Container failed to start" Error
+
+If your deployment fails with an error like `The user-provided container failed to start and listen on the port...`, it means the application inside your container crashed.
+
+*   **Cause**: This often happens because a production web server is not installed. The `flask run` command is for development only. For production, a server like `gunicorn` is needed.
+*   **Solution**: Ensure `gunicorn` is listed in your `requirements.txt` file. The `Dockerfile` is already configured to use it.
+
+### "Invalid Reference Format" Error
+
+If your build fails with an error like `invalid argument ... for "-t, --tag" flag: invalid reference format`, this is almost always a naming issue.
+
+*   **Cause**: Cloud services (including Cloud Build and Docker) have strict naming conventions for resources like repositories and services. Your GitHub repository name might contain characters that are not allowed in a Docker image tag, such as uppercase letters or trailing hyphens.
+*   **Solution**: Ensure your resource names (like your GitHub repo name if using "Build from repository", or the service name in the `gcloud run deploy` command) adhere to these rules:
+    *   Must contain only **lowercase letters, numbers, and hyphens**.
+    *   Must start with a letter.
+    *   Must not end with a hyphen.
+
+**Example:**
+*   **Invalid Name**: `Vibe-Node-r-`
+*   **Valid Name**: `vibe-node-r`
