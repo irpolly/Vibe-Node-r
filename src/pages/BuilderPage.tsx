@@ -13,20 +13,20 @@ import ReactFlow, {
   Node,
 } from 'reactflow';
 
-import Sidebar from '../components/sidebar/Sidebar.tsx';
-import Toolbar from '../components/toolbar/Toolbar.tsx';
-import AgentConfigModal from '../components/modals/AgentConfigModal.tsx';
-import SubmissionModal from '../components/modals/SubmissionModal.tsx';
-import Toast from '../components/ui/Toast.tsx';
-import AgentNode from '../components/canvas/nodes/AgentNode.tsx';
-import TriggerNode from '../components/canvas/nodes/TriggerNode.tsx';
-import ToolNode from '../components/canvas/nodes/ToolNode.tsx';
+import Sidebar from '@/components/sidebar/Sidebar.tsx';
+import Toolbar from '@/components/toolbar/Toolbar.tsx';
+import AgentConfigModal from '@/components/modals/AgentConfigModal.tsx';
+import SubmissionModal from '@/components/modals/SubmissionModal.tsx';
+import Toast from '@/components/ui/Toast.tsx';
+import AgentNode from '@/components/canvas/nodes/AgentNode.tsx';
+import TriggerNode from '@/components/canvas/nodes/TriggerNode.tsx';
+import ToolNode from '@/components/canvas/nodes/ToolNode.tsx';
 
-import { deployWorkflow } from '../services/adkApi.ts';
-import { AGENT_TEMPLATES, INITIAL_NODES, INITIAL_EDGES, ToolIcon, TriggerIcon } from '../constants.tsx';
-import { NodeData, SerializedWorkflow } from '../types.ts';
-import { generateSvg } from '../lib/svgGenerator.ts';
-import { reconstructNodeIcons } from '../lib/utils.ts';
+import { deployWorkflow } from '@/services/adkApi.ts';
+import { AGENT_TEMPLATES, INITIAL_NODES, INITIAL_EDGES, ToolIcon, TriggerIcon } from '@/constants.tsx';
+import { NodeData, SerializedWorkflow } from '@/types.ts';
+import { generateSvg } from '@/lib/svgGenerator.ts';
+import { reconstructNodeIcons } from '@/lib/utils.ts';
 
 const nodeTypes = {
   agentNode: AgentNode,
