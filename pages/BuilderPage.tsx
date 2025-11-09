@@ -144,7 +144,6 @@ const BuilderPageContent: React.FC<BuilderPageProps> = ({ onFinalizeSuccess }) =
         handleAutoAlign();
     }
     setIsInitialLoad(false);
-  // Fix: Set an empty dependency array to ensure this effect runs only once on mount, preventing an infinite loop.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
