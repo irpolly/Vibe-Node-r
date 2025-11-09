@@ -1,80 +1,70 @@
 
-# Vibe Node(r): The Definitive Backend Deployment Guide
+# Vibe Node(r): Backend Deployment Guide for Google Cloud Run
 
-This guide provides the single, most reliable method to deploy your Python backend to Google Cloud Run. Follow these steps exactly.
+This guide provides the definitive, most reliable method to deploy your Python backend to Google Cloud Run using a repository-based workflow.
 
-## Step 1: Initial Setup (Do This Once)
+## The Problem: Monorepo Structure
 
-If you have already done these steps, you can skip to Step 2.
+Your project is structured as a "monorepo," where the backend code (including the `Dockerfile`) is located in a subdirectory (`is-it-ai-grok/backend/`) instead of the root.
 
-1.  **Authenticate gcloud**:
-    ```bash
-    gcloud auth login
-    ```
-2.  **Set Your Project**:
-    ```bash
-    gcloud config set project [YOUR_PROJECT_ID]
-    ```
-    (Replace `[YOUR_PROJECT_ID]` with `cloud-run-hackathon-477510`)
+By default, Cloud Build looks for the `Dockerfile` at the root of the repository. When it doesn't find it, the build fails with a "main.py not found" or similar error.
 
-3.  **Enable APIs**:
-    ```bash
-    gcloud services enable run.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com
-    ```
-4.  **Create API Key Secret**:
-    ```bash
-    gcloud secrets create gemini-api-key --replication-policy="automatic"
-    printf "[YOUR_API_KEY]" | gcloud secrets versions add gemini-api-key --data-file=-
-    ```
-    (Replace `[YOUR_API_KEY]` with your actual key)
+## The Solution: `cloudbuild.yaml`
 
-5.  **Grant Secret Access**:
-    ```bash
-    export PROJECT_NUMBER=$(gcloud projects describe $(gcloud config get-value project) --format='value(projectNumber)')
-    gcloud secrets add-iam-policy-binding gemini-api-key \
-      --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
-      --role="roles/secretmanager.secretAccessor"
-    ```
+The solution is to add a `cloudbuild.yaml` file to the **root** of your repository. This file gives Cloud Build explicit instructions on how to build your project.
+
+The provided `cloudbuild.yaml` tells Cloud Build:
+1.  First, change your working directory into `is-it-ai-grok/backend/`.
+2.  Then, run the `docker build` command from within that directory.
+3.  Finally, push the resulting image to Artifact Registry.
+
+This ensures the build happens in the correct location, using the correct files.
 
 ---
 
-## Step 2: The Golden Command (Deploy Your Backend)
+## Deployment Steps
 
-This is the only command you need to deploy your service. It builds the code from your local machine and deploys it, bypassing any GitHub issues.
+### Step 1: Verify Your Repository Structure
 
-1.  **Navigate to Your Backend Directory**: Open your terminal and `cd` into the folder that contains your `main.py`, `Dockerfile`, and other backend files.
+Ensure your project has the following structure in your GitHub repository:
 
-2.  **Run the Command**: Copy and paste the following command into your terminal. **Replace `[YOUR_PROJECT_ID]` with your actual project ID.**
+```
+.
+├── is-it-ai-grok/
+│   └── backend/
+│       ├── Dockerfile
+│       ├── main.py
+│       ├── agents.py
+│       ├── session.py
+│       └── requirements.txt
+├── cloudbuild.yaml  <-- THIS FILE MUST BE AT THE ROOT
+└── ... (your frontend files)
+```
 
-    ```bash
-    gcloud run deploy vibe-node-r \
-        --source . \
-        --platform managed \
-        --region europe-west4 \
-        --allow-unauthenticated \
-        --set-env-vars="API_KEY=SECRET:gemini-api-key:latest"
-    ```
+### Step 2: Verify Your `Dockerfile`
 
-**Command Breakdown:**
-*   `gcloud run deploy vibe-node-r`: Deploys a service named `vibe-node-r`.
-*   `--source .`: This is the crucial part. The `.` tells `gcloud` to use the code in your **current local directory** as the source.
-*   `--set-env-vars="API_KEY=SECRET:gemini-api-key:latest"`: This securely attaches your API key to the running service.
+Open the `is-it-ai-grok/backend/Dockerfile` file in your repository. **Confirm that it does NOT contain the line `ENV API_KEY=""`.** This is critical.
 
-After this command succeeds, your backend will be live and correctly configured. The frontend is already set up to use the correct URL.
+### Step 3: Push to GitHub to Deploy
+
+With the `cloudbuild.yaml` file at the root of your repository, the automatic build trigger in Cloud Run will now work correctly.
+
+1.  Commit the `cloudbuild.yaml` file and any other changes to your local Git repository.
+2.  Push the changes to your main branch on GitHub.
+
+```bash
+git add .
+git commit -m "Add cloudbuild.yaml for monorepo deployment"
+git push
+```
+
+This will automatically trigger a new build in Cloud Build. Because `cloudbuild.yaml` is present, it will follow the correct steps, and the deployment will succeed.
 
 ---
 
-## Troubleshooting
+## Initial Setup & Troubleshooting
 
-### ERROR: (gcloud.run.deploy) argument --source: expected one argument
+If you are still facing issues, double-check these one-time setup steps.
 
-If you see this error, it means you forgot the `.` at the end of the `--source` flag.
-
-*   **Incorrect**: `gcloud run deploy --source`
-*   **Correct**: `gcloud run deploy --source .`
-
-### ERROR: "Container failed to start"
-
-This means your application crashed instantly.
-*   **Cause**: The most common cause is that your local `Dockerfile` still contains the line `ENV API_KEY=""`.
-*   **Solution**: Open your local `Dockerfile`, delete that line, save the file, and re-run the Golden Command from Step 2.
+1.  **IAM Permissions**: Ensure your Cloud Run service account (`[PROJECT_NUMBER]-compute@developer.gserviceaccount.com`) has the **`Secret Manager Secret Accessor`** role in the IAM settings.
+2.  **Secret Variable**: In the Cloud Run UI, go to your service > Edit & Deploy New Revision > Variables & Secrets. Ensure you have a variable named `API_KEY` that is correctly referencing the `gemini-api-key` secret.
