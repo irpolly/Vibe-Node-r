@@ -57,7 +57,7 @@ const BuilderPageContent: React.FC<BuilderPageProps> = ({ onFinalizeSuccess }) =
     setTimeout(() => setToast(null), 3000);
   };
 
-  const handleAutoAlign = () => {
+  const handleAutoAlign = useCallback(() => {
     if (nodes.length === 0) return;
 
     const adj: { [key: string]: string[] } = {};
@@ -121,7 +121,7 @@ const BuilderPageContent: React.FC<BuilderPageProps> = ({ onFinalizeSuccess }) =
 
     setNodes([...newNodes]);
     showToast("Workflow aligned!", "success");
-  };
+  }, [nodes, edges, setNodes]);
 
   // Auto-load session on mount
   useEffect(() => {
@@ -138,16 +138,15 @@ const BuilderPageContent: React.FC<BuilderPageProps> = ({ onFinalizeSuccess }) =
         showToast("Restored previous session.", "success");
       } catch (e) {
         console.error("Could not restore session:", e);
-        // If restore fails, align the default nodes
         handleAutoAlign();
       }
     } else {
-        // Align the initial default nodes on first load
         handleAutoAlign();
     }
     setIsInitialLoad(false);
+  // Fix: Set an empty dependency array to ensure this effect runs only once on mount, preventing an infinite loop.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setNodes, setEdges, setViewport]);
+  }, []);
 
   // Auto-save session on change (debounced)
   useEffect(() => {
