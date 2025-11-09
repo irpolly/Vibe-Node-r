@@ -126,8 +126,8 @@ If your deployment fails with an error like `The user-provided container failed 
 
 *   **Cause 1: Missing Production Server**: The `flask run` command is for development only. For production, a server like `gunicorn` is needed.
     *   **Solution**: Ensure `gunicorn` is listed in your `requirements.txt` file. The `Dockerfile` is already configured to use it.
-*   **Cause 2: Premature Initialization Crash**: Your code might be trying to access resources (like environment variables or files) at the module level (i.e., on import). If these resources aren't ready when the container starts, the app will crash before the server can start.
-    *   **Solution**: Use a "lazy initialization" pattern. For example, configure clients like the Gemini API inside a function or class `__init__` method, not at the top of the file. This defers initialization until after the app has started.
+*   **Cause 2: Premature Initialization Crash**: Your code might be trying to access resources (like environment variables) at the module level (i.e., on import). If these resources aren't ready when the container starts, the app will crash before the server can start.
+    *   **Solution**: Use a "lazy initialization" pattern. For example, configure clients like the Gemini API inside a function or class `__init__` method, not at the top of the file. **Crucially, do not set a default `ENV API_KEY=""` in your Dockerfile**, as this will cause the application to read an empty key and crash before Cloud Run can inject the real secret.
 
 ### "Invalid Reference Format" Error
 
