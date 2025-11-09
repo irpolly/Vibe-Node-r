@@ -1,88 +1,72 @@
 
-# Vibe Node(r): Backend Deployment Guide for Google Cloud Run
+# Vibe Node(r): Final Deployment Guide
 
-This guide provides the definitive, most reliable method to deploy your Python backend to Google Cloud Run.
+This guide provides the definitive method to deploy your unified frontend and backend application to Google Cloud Run.
 
-## Prerequisites
+## Architecture Overview
 
-1.  **Google Cloud Project**: You need a Google Cloud project with billing enabled.
-2.  **gcloud CLI**: Make sure you have the [Google Cloud SDK](https://cloud.google.com/sdk/docs/install) installed and initialized.
-3.  **Enabled APIs**: Ensure the following APIs are enabled for your project:
-    *   Cloud Build API (`serviceusage.googleapis.com`)
-    *   Artifact Registry API (`artifactregistry.googleapis.com`)
-    *   Cloud Run Admin API (`run.googleapis.com`)
-    *   Secret Manager API (`secretmanager.googleapis.com`)
-
-    You can enable them with: `gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com`
+Your application is now a single, self-contained service. The `Dockerfile` uses a **multi-stage build** to achieve this:
+1.  **Stage 1 (Node.js)**: It builds your React frontend into a folder of static files (`dist/`).
+2.  **Stage 2 (Python)**: It copies the static files from Stage 1 into the final Python container's `build/` directory.
+3.  **Result**: The Python Flask server runs, serving both the static frontend files (your app's UI) and the backend API (`/api/...`) from the same container. This eliminates all CORS issues and simplifies deployment.
 
 ---
 
 ## Deployment Steps
 
-### Step 1: Authenticate and Configure gcloud
+### Step 1: Initial Setup (Do This Once)
 
-First, authenticate your local gcloud CLI and set your project.
+If you have already done these steps, you can skip to Step 2.
 
-```bash
-# Log in to your Google Account
-gcloud auth login
+1.  **Authenticate gcloud**: `gcloud auth login`
+2.  **Set Project**: `gcloud config set project [YOUR_PROJECT_ID]`
+3.  **Enable APIs**: `gcloud services enable run.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com generativelanguage.googleapis.com`
+4.  **Create API Key Secret**:
+    ```bash
+    gcloud secrets create gemini-api-key --replication-policy="automatic"
+    printf "[YOUR_API_KEY]" | gcloud secrets versions add gemini-api-key --data-file=-
+    ```
+5.  **Grant Secret Access**:
+    ```bash
+    export PROJECT_NUMBER=$(gcloud projects describe $(gcloud config get-value project) --format='value(projectNumber)')
+    gcloud secrets add-iam-policy-binding gemini-api-key \
+      --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+      --role="roles/secretmanager.secretAccessor"
+    ```
 
-# Set your project ID
-gcloud config set project [YOUR_PROJECT_ID]
-```
-Replace `[YOUR_PROJECT_ID]` with your actual Google Cloud project ID (e.g., `cloud-run-hackathon-477510`).
+---
 
-### Step 2: Secure Your API Key (If Not Already Done)
+## Step 2: The Golden Command (Deploy Everything)
 
-If you haven't already, create a secret to hold your API key.
+This single command builds and deploys your entire unified application.
 
-```bash
-# Create the secret
-gcloud secrets create gemini-api-key --replication-policy="automatic"
+1.  **Navigate to Your Project's Root Directory**: Open your terminal and `cd` into the top-level folder that contains your `Dockerfile`, `package.json`, and `main.py`.
 
-# Add your API key to the secret
-printf "[YOUR_API_KEY]" | gcloud secrets versions add gemini-api-key --data-file=-
-```
+2.  **Run the Command**: Copy and paste the following command into your terminal. **Replace `[YOUR_PROJECT_ID]` with your actual project ID.**
 
-### Step 3: Grant Secret Access (If Not Already Done)
+    ```bash
+    gcloud run deploy vibe-node-r \
+        --source . \
+        --platform managed \
+        --region europe-west4 \
+        --allow-unauthenticated \
+        --set-env-vars="API_KEY=SECRET:gemini-api-key:latest"
+    ```
 
-Ensure the Cloud Run service identity has permission to access the secret.
+After this command succeeds, your backend and frontend will be live at the same public URL.
 
-```bash
-# Get your Google Cloud Project Number
-export PROJECT_NUMBER=$(gcloud projects describe $(gcloud config get-value project) --format='value(projectNumber)')
+---
 
-# Grant the access role
-gcloud secrets add-iam-policy-binding gemini-api-key \
-  --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
-  --role="roles/secretmanager.secretAccessor"
-```
+## Troubleshooting
 
-### Step 4: Final Sanity Check (CRITICAL)
+### ERROR: "COPY failed: stat app/build: file does not exist"
 
-Before you deploy, **you must verify the `Dockerfile` on your local computer.**
+This error means the `Dockerfile` is trying to copy the frontend build output from the wrong directory.
+*   **Cause**: The frontend build tool (Vite) creates a `dist` directory, but the `Dockerfile` was looking for a `build` directory.
+*   **Solution**: Ensure your `Dockerfile`'s final `COPY` command is `COPY --from=builder /app/dist ./build`.
 
-1.  Open the `Dockerfile` in your project folder.
-2.  **Confirm that the file does NOT contain the line `ENV API_KEY=""`.** If it does, you must remove it and save the file. This is the most common cause of deployment failure.
+### ERROR: "Container failed to start"
 
-### Step 5: The Definitive Build and Deploy Command
-
-Navigate your terminal to the directory containing your backend files (`main.py`, `Dockerfile`, etc.). Run the following single command. This command builds the code from your **local directory** (bypassing any GitHub cache) and deploys it to Cloud Run.
-
-**Replace `[YOUR_PROJECT_ID]` in the command below with your actual project ID.**
-
-```bash
-# Build from your local source and deploy the service
-gcloud run deploy vibe-node-r \
-    --source . \
-    --platform managed \
-    --region europe-west4 \
-    --allow-unauthenticated \
-    --set-env-vars="API_KEY=SECRET:gemini-api-key:latest"
-```
-
-This single `gcloud run deploy --source .` command is the most reliable method. It tells Cloud Build to use the code in your current directory, build it, and deploy the resulting image to Cloud Run all in one atomic step.
-
-### Step 6: Verify Success
-
-After the command finishes, it will output the **Service URL**. Your backend is now live. The frontend is already configured to use the correct URL, so the application should work immediately.
+This means your application crashed instantly.
+*   **Cause**: The most common cause is an issue with the API Key. Either the IAM permission is missing, or the secret was not attached correctly.
+*   **Solution**: Carefully re-run the commands in Step 1.5 (Grant Secret Access) and Step 2 (The Golden Command) to ensure the permissions and configuration are correct. Use the "Logs URL" from the error message to see the specific error inside the container.

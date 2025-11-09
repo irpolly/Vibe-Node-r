@@ -1,25 +1,45 @@
 
-# Use an official Python runtime as a parent image
-FROM python:3.11-slim
+# --- Stage 1: Build the React Frontend ---
+# Use a Node.js image as the builder
+FROM node:20-slim as builder
 
-# Set the working directory in the container
+# Set the working directory
 WORKDIR /app
 
-# Copy the dependencies file to the working directory
-COPY requirements.txt .
+# Copy package.json and install dependencies
+# This leverages Docker layer caching
+COPY package.json .
+RUN npm install
 
-# Install any needed packages specified in requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install --upgrade pip
-
-# Copy the rest of the application code to the working directory
+# Copy the rest of the frontend source code
 COPY . .
 
-# Make port 8080 available to the world outside this container
-# Cloud Run expects the container to listen on the port defined by the PORT env var.
-# 8080 is the default.
+# Build the static files. This creates a /app/dist directory.
+RUN npm run build
+
+# --- Stage 2: Build the Python Backend ---
+# Use the Python image for the final container
+FROM python:3.11-slim
+
+# Set the working directory
+WORKDIR /app
+
+# Copy Python dependencies and install them
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the Python backend code
+COPY main.py .
+COPY session.py .
+COPY agents.py .
+
+# Copy the built frontend static files from the 'builder' stage's /app/dist directory
+# into a 'build' directory in the final container. The Python app is configured to serve from 'build'.
+COPY --from=builder /app/dist ./build
+
+# Make port 8080 available
 EXPOSE 8080
 
-# Run main.py when the container launches using gunicorn
+# Run the Gunicorn server
 # The API_KEY will be injected by the Cloud Run service from Secret Manager.
 CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 main:app

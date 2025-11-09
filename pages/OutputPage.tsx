@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Button from '../components/ui/Button.tsx';
 import Spinner from '../components/ui/Spinner.tsx';
 import Toast from '../components/ui/Toast.tsx';
-import { GitHubIcon, DeployIcon, DownloadIcon, BackIcon, ManagerIcon, CodeIcon, DesignIcon, TestIcon, WriterIcon } from '../constants.tsx';
+import { GitHubIcon, DownloadIcon, BackIcon, ManagerIcon, CodeIcon, DesignIcon, TestIcon, WriterIcon, ChatLogIcon } from '../constants.tsx';
 import { ChatMessage } from '../types.ts';
 import { runWorkflow, getSessionStatus, getArtifactContent } from '../services/adkApi.ts';
 
@@ -135,9 +135,30 @@ const OutputPage: React.FC<OutputPageProps> = ({ onBack, workflowId }) => {
     }
   };
 
-  const handleSave = () => {
+  const handleSaveChatLog = () => {
+    if (agentMessages.length === 0) {
+      showToast('No chat log to save.', 'error');
+      return;
+    }
+    const logContent = agentMessages
+      .map(msg => `[${msg.timestamp}] ${msg.agent.name}: ${msg.text}`)
+      .join('\n');
+    
+    const blob = new Blob([logContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'agent-chat-log.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Chat log saved!', 'success');
+  };
+
+  const handleSaveProject = () => {
     if (code === initialCode || isLoading) {
-      showToast('Please generate some code first.', 'error');
+      showToast('No project code to save.', 'error');
       return;
     }
     const blob = new Blob([code], { type: 'text/html' });
@@ -149,10 +170,10 @@ const OutputPage: React.FC<OutputPageProps> = ({ onBack, workflowId }) => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    showToast('Code saved as index.html!', 'success');
+    showToast('Project saved as index.html!', 'success');
   };
 
-  const handleDeploy = (platform: 'GitHub' | 'Cloud Run') => {
+  const handleDeploy = (platform: 'GitHub') => {
     showToast(`Simulating deployment to ${platform}...`, 'success');
   };
 
@@ -166,9 +187,9 @@ const OutputPage: React.FC<OutputPageProps> = ({ onBack, workflowId }) => {
             <h1 className="text-lg font-bold text-cyan-400">Vibe-to-Code Output</h1>
         </div>
         <div className="flex items-center gap-3">
-          <Button onClick={handleSave} variant="secondary"><DownloadIcon className="w-5 h-5" /> Save</Button>
+          <Button onClick={handleSaveChatLog} variant="secondary"><ChatLogIcon className="w-5 h-5" /> Save Chat Log</Button>
+          <Button onClick={handleSaveProject} variant="secondary"><DownloadIcon className="w-5 h-5" /> Save Project</Button>
           <Button onClick={() => handleDeploy('GitHub')} variant="secondary"><GitHubIcon className="w-5 h-5" /> Deploy to GitHub</Button>
-          <Button onClick={() => handleDeploy('Cloud Run')} variant="secondary"><DeployIcon className="w-5 h-5" /> Deploy to Cloud Run</Button>
         </div>
       </header>
 
