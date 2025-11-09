@@ -23,7 +23,7 @@ import TriggerNode from '../components/canvas/nodes/TriggerNode.tsx';
 import ToolNode from '../components/canvas/nodes/ToolNode.tsx';
 
 import { deployWorkflow } from '../services/adkApi.ts';
-import { AGENT_TEMPLATES, INITIAL_NODES, ToolIcon, TriggerIcon } from '../constants.tsx';
+import { AGENT_TEMPLATES, INITIAL_NODES, INITIAL_EDGES, ToolIcon, TriggerIcon } from '../constants.tsx';
 import { NodeData, SerializedWorkflow } from '../types.ts';
 import { generateSvg } from '../lib/svgGenerator.ts';
 import { reconstructNodeIcons } from '../lib/utils.ts';
@@ -43,7 +43,7 @@ const BuilderPageContent: React.FC<BuilderPageProps> = ({ onFinalizeSuccess }) =
   const { screenToFlowPosition, getViewport, setViewport } = useReactFlow();
   
   const [nodes, setNodes, onNodesChange] = useNodesState(() => INITIAL_NODES);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(() => []);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(() => INITIAL_EDGES);
   
   const [selectedNode, setSelectedNode] = useState<any>(null);
   const [isSubmissionModalOpen, setSubmissionModalOpen] = useState(false);
@@ -55,6 +55,72 @@ const BuilderPageContent: React.FC<BuilderPageProps> = ({ onFinalizeSuccess }) =
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleAutoAlign = () => {
+    if (nodes.length === 0) return;
+
+    const adj: { [key: string]: string[] } = {};
+    const inDegree: { [key: string]: number } = {};
+
+    nodes.forEach(node => {
+        adj[node.id] = [];
+        inDegree[node.id] = 0;
+    });
+
+    edges.forEach(edge => {
+        adj[edge.source].push(edge.target);
+        inDegree[edge.target]++;
+    });
+
+    const queue: string[] = nodes.filter(node => inDegree[node.id] === 0).map(n => n.id);
+    
+    const layers: { [level: number]: string[] } = {};
+    let level = 0;
+
+    while (queue.length > 0) {
+        const levelSize = queue.length;
+        layers[level] = [];
+        for (let i = 0; i < levelSize; i++) {
+            const u = queue.shift()!;
+            layers[level].push(u);
+            
+            adj[u]?.forEach(v => {
+                inDegree[v]--;
+                if (inDegree[v] === 0) {
+                    queue.push(v);
+                }
+            });
+        }
+        level++;
+    }
+
+    const COLUMN_WIDTH = 280;
+    const ROW_HEIGHT = 180;
+
+    const newNodes = [...nodes];
+    const nodeMap = new Map(newNodes.map(n => [n.id, n]));
+
+    Object.keys(layers).forEach(levelStr => {
+        const currentLevel = parseInt(levelStr, 10);
+        const nodesInLevel = layers[currentLevel];
+        const numNodes = nodesInLevel.length;
+        const levelHeight = (numNodes - 1) * ROW_HEIGHT;
+        const startY = -levelHeight / 2;
+
+        nodesInLevel.forEach((nodeId, i) => {
+            const node = nodeMap.get(nodeId);
+            if (node) {
+                node.position = {
+                    x: currentLevel * COLUMN_WIDTH,
+                    y: startY + i * ROW_HEIGHT,
+                };
+            }
+        });
+    });
+
+    setNodes([...newNodes]);
+    showToast("Workflow aligned!", "success");
   };
 
   // Auto-load session on mount
@@ -72,14 +138,20 @@ const BuilderPageContent: React.FC<BuilderPageProps> = ({ onFinalizeSuccess }) =
         showToast("Restored previous session.", "success");
       } catch (e) {
         console.error("Could not restore session:", e);
+        // If restore fails, align the default nodes
+        handleAutoAlign();
       }
+    } else {
+        // Align the initial default nodes on first load
+        handleAutoAlign();
     }
     setIsInitialLoad(false);
-  }, [setNodes, setEdges, setViewport]); // Dependencies for hooks used inside
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setNodes, setEdges, setViewport]);
 
   // Auto-save session on change (debounced)
   useEffect(() => {
-    if (isInitialLoad) return; // Don't save during initial load
+    if (isInitialLoad) return;
 
     const handler = setTimeout(() => {
       const serializableNodes = nodes.map(node => {
@@ -248,6 +320,7 @@ const BuilderPageContent: React.FC<BuilderPageProps> = ({ onFinalizeSuccess }) =
         onToggleDeleteMode={handleToggleDeleteMode}
         isDeletingMode={isDeletingMode}
         onShowSubmission={() => setSubmissionModalOpen(true)}
+        onAutoAlign={handleAutoAlign}
         isLoading={isLoading}
       />
       <div className="flex flex-1 h-full">

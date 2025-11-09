@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Node } from 'reactflow';
+import { Node, Edge } from 'reactflow';
 import { NodeData, AgentConfig } from './types.ts';
 
 export const CodeIcon = (props: React.SVGProps<SVGSVGElement>) => (
@@ -52,6 +52,12 @@ export const TrashIcon = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+export const AlignIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
+  </svg>
+);
+
 export const GitHubIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" {...props}>
     <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"></path>
@@ -86,7 +92,7 @@ export const AGENT_TEMPLATES: Record<string, { icon: React.ReactNode, color: str
   designer: {
     icon: <DesignIcon className="w-6 h-6" />,
     color: 'bg-purple-500',
-    config: { role: 'Designer Agent', goal: 'Create visually appealing UI/UX mockups and assets.', llm: 'gemini-2.5-flash', tools: ['image_generator', 'style_analyzer'] }
+    config: { role: 'Designer Agent', goal: 'Create visually appealing UI/UX mockups and assets.', llm: 'gemini-2.5-flash', tools: ['image_generator', 'style_analyzer', 'Audio Synthesis'] }
   },
   tester: {
     icon: <TestIcon className="w-6 h-6" />,
@@ -106,40 +112,22 @@ export const AGENT_TEMPLATES: Record<string, { icon: React.ReactNode, color: str
 };
 
 export const INITIAL_NODES: Node<NodeData>[] = [
-  {
-    id: '1',
-    type: 'triggerNode',
-    position: { x: 100, y: 200 },
-    data: {
-      label: 'Vibe Input',
-      type: 'trigger',
-      icon: <TriggerIcon className="w-8 h-8 text-amber-400" />,
-    },
-  },
-  {
-    id: '2',
-    type: 'agentNode',
-    position: { x: 400, y: 100 },
-    data: {
-      label: 'Coder Agent',
-      type: 'agent',
-      icon: AGENT_TEMPLATES.coder.icon,
-      color: AGENT_TEMPLATES.coder.color,
-      config: AGENT_TEMPLATES.coder.config,
-      templateKey: 'coder',
-    },
-  },
-  {
-    id: '3',
-    type: 'agentNode',
-    position: { x: 400, y: 300 },
-    data: {
-      label: 'Designer Agent',
-      type: 'agent',
-      icon: AGENT_TEMPLATES.designer.icon,
-      color: AGENT_TEMPLATES.designer.color,
-      config: AGENT_TEMPLATES.designer.config,
-      templateKey: 'designer',
-    },
-  },
+  { id: '1', type: 'triggerNode', position: { x: 0, y: 0 }, data: { label: 'Vibe Input', type: 'trigger', icon: <TriggerIcon className="w-8 h-8 text-amber-400" /> } },
+  { id: '2', type: 'agentNode', position: { x: 0, y: 0 }, data: { ...AGENT_TEMPLATES.manager, label: 'Manager Agent', templateKey: 'manager' } },
+  { id: '3', type: 'agentNode', position: { x: 0, y: 0 }, data: { ...AGENT_TEMPLATES.writer, label: 'Writer Agent', templateKey: 'writer' } },
+  { id: '4', type: 'agentNode', position: { x: 0, y: 0 }, data: { ...AGENT_TEMPLATES.designer, label: 'Designer Agent', templateKey: 'designer' } },
+  { id: '5', type: 'agentNode', position: { x: 0, y: 0 }, data: { ...AGENT_TEMPLATES.coder, label: 'Coder Agent', templateKey: 'coder' } },
+  { id: '6', type: 'agentNode', position: { x: 0, y: 0 }, data: { ...AGENT_TEMPLATES.tester, label: 'Tester Agent', templateKey: 'tester' } },
+  { id: '7', type: 'toolNode', position: { x: 0, y: 0 }, data: { label: 'Audio Synthesis', type: 'tool', icon: <ToolIcon className="w-6 h-6" /> } },
+  { id: '8', type: 'toolNode', position: { x: 0, y: 0 }, data: { label: 'Code Generator', type: 'tool', icon: <ToolIcon className="w-6 h-6" /> } },
+];
+
+export const INITIAL_EDGES: Edge[] = [
+  { id: 'e1-2', source: '1', target: '2', animated: true },
+  { id: 'e2-3', source: '2', target: '3' },
+  { id: 'e2-4', source: '2', target: '4' },
+  { id: 'e2-5', source: '2', target: '5' },
+  { id: 'e4-7', source: '4', target: '7' },
+  { id: 'e5-6', source: '5', target: '6' },
+  { id: 'e6-8', source: '6', target: '8' },
 ];

@@ -146,7 +146,7 @@ const OutputPage: React.FC<OutputPageProps> = ({ onBack, workflowId }) => {
     a.href = url;
     a.download = 'index.html';
     document.body.appendChild(a);
-a.click();
+    a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     showToast('Code saved as index.html!', 'success');

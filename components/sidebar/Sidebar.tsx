@@ -16,7 +16,7 @@ const Sidebar: React.FC = () => {
 
   return (
     <aside className="w-64 bg-gray-900 p-4 border-r border-gray-700/50 flex flex-col gap-4">
-      <h2 className="text-lg font-bold text-cyan-400">Nodes</h2>
+      <h2 className="text-lg font-bold text-cyan-400">Available Nodes</h2>
       
       <div className="space-y-2">
         <h3 className="text-sm font-semibold text-gray-400">Trigger</h3>
