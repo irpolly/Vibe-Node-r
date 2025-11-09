@@ -8,7 +8,7 @@ const API_BASE_URL = "https://vibe-node-r-85229041043.europe-west4.run.app";
  * Checks if the API URL is configured and throws an error if not.
  */
 const checkApiConfig = () => {
-  if (!API_BASE_URL || API_BASE_URL.includes("YOUR_CLOUD_RUN_SERVICE_URL")) {
+  if (!API_BASE_URL || API_BASE_URL.includes("https://vibe-node-r-85229041043.europe-west4.run.app")) {
     throw new Error("Backend API endpoint is not configured. Please follow the deployment-guide.md and update the API_BASE_URL in services/adkApi.ts");
   }
 };
