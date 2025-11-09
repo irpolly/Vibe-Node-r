@@ -115,3 +115,23 @@ After the deployment command finishes, it will output the **Service URL**. It wi
 3.  Replace the placeholder `"[YOUR_CLOUD_RUN_SERVICE_URL]"` with your actual service URL.
 
 Your frontend application is now fully configured to communicate with your live, scalable, and secure backend running on Google Cloud Run.
+
+---
+
+## Troubleshooting
+
+### "Container failed to start" Error
+
+If your deployment fails with an error like `The user-provided container failed to start and listen on the port...`, it means the application inside your container crashed immediately on startup.
+
+*   **Cause 1: Missing Production Server**: The `flask run` command is for development only. For production, a server like `gunicorn` is needed.
+    *   **Solution**: Ensure `gunicorn` is listed in your `requirements.txt` file. The `Dockerfile` is already configured to use it.
+*   **Cause 2: Premature Initialization Crash**: Your code might be trying to access resources (like environment variables or files) at the module level (i.e., on import). If these resources aren't ready when the container starts, the app will crash before the server can start.
+    *   **Solution**: Use a "lazy initialization" pattern. For example, configure clients like the Gemini API inside a function or class `__init__` method, not at the top of the file. This defers initialization until after the app has started.
+
+### "Invalid Reference Format" Error
+
+If your build fails with an error like `invalid argument ... for "-t, --tag" flag: invalid reference format`, this is almost always a naming issue.
+
+*   **Cause**: Your GitHub repository name or the service name you provided contains characters that are not allowed in a Docker image tag (e.g., uppercase letters, special characters).
+*   **Solution**: Ensure your resource names adhere to these rules: lowercase letters, numbers, and hyphens only.
