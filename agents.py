@@ -33,9 +33,9 @@ class Agent:
         """Generates a response using the Vertex AI Gemini API."""
         try:
             # Instantiating the model from the Vertex AI SDK
-            model = GenerativeModel(MODEL_NAME)
-            full_prompt = f"You are an AI agent acting as a {self.role} in a team. Your personality should be professional but concise. Based on the following prompt, provide your response or update in 1-2 sentences.\n\nPROMPT: \"{prompt}\""
-            response = await model.generate_content_async(full_prompt)
+            system_instruction = f"You are an AI agent acting as a {self.role} in a team. Your personality should be professional but concise. Based on the following prompt, provide your response or update in 1-2 sentences."
+            model = GenerativeModel(MODEL_NAME, system_instruction=system_instruction)
+            response = await model.generate_content_async(prompt)
             return response.text.strip()
         except Exception as e:
             error_text = f"Error generating response: {e}"
@@ -99,22 +99,24 @@ class CoderAgent(Agent):
 
     async def _generate_final_code(self, conversation: str, vibe: str) -> str:
         """Generates the final HTML game file using the Vertex AI Gemini API."""
-        prompt = f"""
+        system_instruction = """
         Based on the following development team conversation and the initial "vibe", act as an expert frontend developer.
         Your task is to generate a complete, single-file HTML document that implements the described game.
         The HTML file must include all necessary CSS and JavaScript within it. Do not use any external libraries.
         The game should be simple, playable, and visually match the retro/pixel-art theme discussed.
-
+        Ensure the output is ONLY the HTML code, starting with <!DOCTYPE html>.
+        """
+        prompt = f"""
         INITIAL VIBE: "{vibe}"
 
         AGENT CONVERSATION:
         {conversation}
 
-        Generate the HTML file now. Ensure the output is ONLY the HTML code, starting with <!DOCTYPE html>.
+        Generate the HTML file now.
         """
         try:
             # Instantiating the model from the Vertex AI SDK
-            model = GenerativeModel(MODEL_NAME)
+            model = GenerativeModel(MODEL_NAME, system_instruction=system_instruction)
             response = await model.generate_content_async(prompt)
             text = response.text.strip()
             if '```html' in text:
