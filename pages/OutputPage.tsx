@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Button from '../components/ui/Button.tsx';
 import Spinner from '../components/ui/Spinner.tsx';
 import Toast from '../components/ui/Toast.tsx';
+import Emulator from '../components/ui/Emulator.tsx';
 import { GitHubIcon, DownloadIcon, BackIcon, ManagerIcon, CodeIcon, DesignIcon, TestIcon, WriterIcon, ChatLogIcon } from '../constants.tsx';
 import { ChatMessage } from '../types.ts';
 import { runWorkflow, getSessionStatus } from '../services/adkApi.ts';
@@ -11,10 +12,15 @@ interface OutputPageProps {
   workflowId: string | null;
 }
 
-const initialCode = `<!--
-  The generated code for the live preview
-  will appear here after the agents finish.
--->`;
+const initialCode = `
+<html style="height: 100%;">
+  <body style="height: 100%; margin: 0; display: flex; align-items: center; justify-content: center; font-family: Inter, sans-serif; background-color: #111827; color: #9ca3af;">
+    <div style="text-align: center; padding: 2rem;">
+      <p>The generated code for the live preview will appear here after the agents finish.</p>
+    </div>
+  </body>
+</html>
+`;
 
 const agentAvatars: Record<string, React.ReactNode> = {
     'Manager Agent': <ManagerIcon className="w-6 h-6 text-orange-400" />,
@@ -279,16 +285,13 @@ const OutputPage: React.FC<OutputPageProps> = ({ onBack, workflowId }) => {
         </div>
 
         {/* Right Column */}
-        <div className="flex flex-col h-full overflow-y-auto pr-2">
-          <h2 className="text-lg font-semibold mb-2 text-gray-300">3. Live Preview</h2>
-          <div className="flex-1 bg-gray-800 rounded-lg border border-gray-700 overflow-hidden min-h-[300px]">
-            <iframe
+        <div className="flex flex-col h-full overflow-y-auto">
+          <h2 className="text-lg font-semibold mb-4 text-gray-300">3. Live Preview</h2>
+          <div className="flex-1 flex items-center justify-center w-full min-h-0">
+            <Emulator
               ref={iframeRef}
-              title="Live Preview"
-              className="w-full h-full bg-white"
-              sandbox="allow-scripts allow-same-origin"
-              src={previewUrl || undefined}
-              srcDoc={!previewUrl ? initialCode : undefined}
+              src={previewUrl}
+              srcDoc={initialCode}
             />
           </div>
           {artifacts.length > 0 && (

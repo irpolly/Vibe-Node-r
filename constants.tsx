@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Node, Edge } from 'reactflow';
 import { NodeData, AgentConfig } from './types.ts';
@@ -93,27 +92,27 @@ export const AGENT_TEMPLATES: Record<string, { icon: React.ReactNode, color: str
   coder: {
     icon: <CodeIcon className="w-6 h-6" />,
     color: 'bg-sky-500',
-    config: { role: 'Coder Agent', goal: 'Write, debug, and refactor high-quality code based on specifications.', llm: 'gemini-pro', tools: ['code_interpreter', 'file_system'] }
+    config: { role: 'Coder Agent', goal: 'Write, debug, and refactor high-quality code based on specifications.', llm: 'gemini-2.5-flash', tools: ['code_interpreter', 'file_system'] }
   },
   designer: {
     icon: <DesignIcon className="w-6 h-6" />,
     color: 'bg-purple-500',
-    config: { role: 'Designer Agent', goal: 'Create visually appealing UI/UX mockups and assets.', llm: 'gemini-pro', tools: ['image_generator', 'style_analyzer', 'Audio Synthesis'] }
+    config: { role: 'Designer Agent', goal: 'Create visually appealing UI/UX mockups and assets.', llm: 'gemini-2.5-flash', tools: ['image_generator', 'style_analyzer', 'Audio Synthesis'] }
   },
   tester: {
     icon: <TestIcon className="w-6 h-6" />,
     color: 'bg-green-500',
-    config: { role: 'Tester Agent', goal: 'Create and run tests to ensure code quality and find bugs.', llm: 'gemini-pro', tools: ['test_executor', 'bug_reporter'] }
+    config: { role: 'Tester Agent', goal: 'Create and run tests to ensure code quality and find bugs.', llm: 'gemini-2.5-flash', tools: ['test_executor', 'bug_reporter'] }
   },
   manager: {
     icon: <ManagerIcon className="w-6 h-6" />,
     color: 'bg-orange-500',
-    config: { role: 'Manager Agent', goal: 'Coordinate agent tasks, manage project state, and report progress.', llm: 'gemini-pro', tools: ['task_scheduler', 'progress_tracker'] }
+    config: { role: 'Manager Agent', goal: 'Coordinate agent tasks, manage project state, and report progress.', llm: 'gemini-2.5-flash', tools: ['task_scheduler', 'progress_tracker'] }
   },
   writer: {
     icon: <WriterIcon className="w-6 h-6" />,
     color: 'bg-rose-500',
-    config: { role: 'Writer Agent', goal: 'Generate human-like text for documentation, scripts, or content.', llm: 'gemini-pro', tools: ['text_generator', 'tone_analyzer'] }
+    config: { role: 'Writer Agent', goal: 'Generate human-like text for documentation, scripts, or content.', llm: 'gemini-2.5-flash', tools: ['text_generator', 'tone_analyzer'] }
   }
 };
 

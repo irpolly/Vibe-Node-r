@@ -1,4 +1,3 @@
-
 #// Grok got your weights!!!
 import asyncio
 import json
@@ -31,7 +30,7 @@ class Agent:
     async def generate_response(self, prompt: str) -> str:
         """Generates a response using the Vertex AI Gemini API."""
         try:
-            model_name = self.config.get("llm", "gemini-pro")
+            model_name = self.config.get("llm", "gemini-2.5-flash")
             system_instruction = f"You are an AI agent acting as a {self.role} in a team. Your personality should be professional but concise. Based on the following prompt, provide your response or update in 1-2 sentences."
             model = GenerativeModel(model_name, system_instruction=system_instruction)
             response = await model.generate_content_async(prompt)
@@ -137,6 +136,7 @@ class CoderAgent(Agent):
         1.  The game MUST be playable on both desktop (keyboard/mouse) and mobile (touchscreen) devices.
         2.  The `index.html` file MUST correctly link to other generated files (e.g., `<link rel="stylesheet" href="style.css">` and `<script src="game.js" type="module"></script>`).
         3.  The game should be simple, playable, and adhere to the user's instructions.
+        4.  Player movement should feel responsive. For movement, update the player's `flipX` property to track direction.
 
         **AVAILABLE TOOLS:**
         You are encouraged to use these JavaScript libraries via their public CDNs for better results.
@@ -148,10 +148,19 @@ class CoderAgent(Agent):
         - **Animation**:
           - **GSAP**: For high-performance animations and tweens (e.g., UI, transitions, complex movements). Include with `<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>`.
 
-        **KABOOM.JS BEST PRACTICE:**
-        When using Kaboom.js, do NOT provide a `canvas` property during initialization. Let Kaboom create and manage its own canvas.
-        - **Correct:** `kaboom({{ background: [0, 0, 0] }});`
-        - **Incorrect:** `kaboom({{ canvas: document.querySelector("canvas") }});`
+        **KABOOM.JS BEST PRACTICES:**
+        - **Initialization**: Do NOT provide a `canvas` property during initialization. Let Kaboom create its own.
+          - Correct: `kaboom({{ background: [0, 0, 0] }});`
+          - Incorrect: `kaboom({{ canvas: document.querySelector("canvas") }});`
+        - **Movement & Physics**: For smooth physics-based movement, use the `.move()` method for continuous movement and `.jump()` for vertical impulses. For special moves like a dash, directly manipulate the `.velocity` property and temporarily set `.gravityScale = 0` for air dashes.
+          - Example Dash Start: `player.gravityScale = 0; player.velocity = vec2(500, 0);`
+          - Example Dash End: `player.gravityScale = 1; player.velocity.x = 0;`
+        - **Direction**: When moving the player left or right, set `player.flipX = true` for left and `player.flipX = false` for right. Use this property to determine dash direction.
+
+        **GSAP BEST PRACTICES:**
+        - **Targeting**: When animating a Kaboom game object, target the object variable directly, not its internal properties like `children`. Animate standard Kaboom component properties like `scale`, `opacity`, or `color`.
+          - Correct: `gsap.to(myGameObject, {{ scale: 0.9, duration: 0.1 }});`
+          - Incorrect: `gsap.to(myGameObject.children[0], {{ ... }});`
 
         {instruction_block}
 
@@ -166,7 +175,7 @@ class CoderAgent(Agent):
         Generate the file structure as a JSON object now.
         """
         try:
-            model_name = self.config.get("llm", "gemini-pro")
+            model_name = self.config.get("llm", "gemini-2.5-flash")
             model = GenerativeModel(model_name, system_instruction=system_instruction)
             # Request JSON output from the model
             response = await model.generate_content_async(prompt, generation_config={"response_mime_type": "application/json"})
