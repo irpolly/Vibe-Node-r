@@ -210,7 +210,19 @@ Now, generate the complete and updated file structure as a single JSON object. S
         try:
             model_name = self.config.get("llm", "gemini-2.5-flash")
             model = GenerativeModel(model_name, system_instruction=system_instruction)
-            response = await model.generate_content_async(prompt, generation_config={"response_mime_type": "application/json"})
+
+            # Define generation config to manage token usage for gemini-2.5-flash
+            # This prevents the model from using all its tokens for "thinking" and failing on MAX_TOKENS.
+            generation_config = {
+                "response_mime_type": "application/json",
+                "max_output_tokens": 16384,
+                "thinking_config": {
+                    "thinking_budget": 8192
+                }
+            }
+
+            response = await model.generate_content_async(prompt, generation_config=generation_config)
+            
             text_response = response.text.strip()
             if text_response.startswith("```json"): text_response = text_response[7:].strip()
             if text_response.endswith("```"): text_response = text_response[:-3].strip()
@@ -221,15 +233,16 @@ Now, generate the complete and updated file structure as a single JSON object. S
             raw_response_text = "Could not parse JSON response from model."
             try:
                 raw_response_text = response.text
-            except NameError:
-                pass # response object might not exist
+            except (NameError, AttributeError):
+                # response object might not exist or might not have a .text attribute
+                pass 
             
             error_html = f"""
             <html>
                 <head><title>Generation Error</title></head>
                 <body style="font-family: monospace; background-color: #111; color: #f00;">
                     <h1>Agent Coder Error</h1>
-                    <p>Failed to generate structured game files. The model did not return valid JSON.</p>
+                    <p>Failed to generate structured game files. The model did not return valid JSON or hit a token limit.</p>
                     <h2>Error Details:</h2>
                     <pre>{e}</pre>
                     <h2>Raw Model Response:</h2>

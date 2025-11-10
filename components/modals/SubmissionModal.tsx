@@ -9,7 +9,7 @@ interface SubmissionModalProps {
 }
 
 const SubmissionModal: React.FC<SubmissionModalProps> = ({ onClose, onDownloadSvg }) => {
-  const repoUrl = 'https://github.com/new?template_name=vibe-coding-hackathon&template_owner=google-cloud-run-hackathon';
+  const repoUrl = 'https://github.com/irpolly/Vibe-Node-r';
   const promptLink = 'https://gist.github.com/your-username/your-gist-id'; // Placeholder
 
   return (
@@ -32,13 +32,13 @@ const SubmissionModal: React.FC<SubmissionModalProps> = ({ onClose, onDownloadSv
 
         <div>
           <h3 className="font-semibold text-lg text-cyan-400 mb-2">Phase 2: AI Agents</h3>
-          <p className="text-sm text-gray-400 mb-3">Generate an architecture diagram and create a public repository for your agent workflow code.</p>
+          <p className="text-sm text-gray-400 mb-3">Generate an architecture diagram and view the public repository for your agent workflow code.</p>
           <div className="flex flex-col sm:flex-row gap-4">
             <Button onClick={onDownloadSvg} className="flex-1">
               Download Architecture.svg
             </Button>
             <a href={repoUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
-              <Button className="w-full">Create GitHub Repo</Button>
+              <Button className="w-full">View GitHub Repo</Button>
             </a>
           </div>
         </div>
