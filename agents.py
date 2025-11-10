@@ -130,10 +130,16 @@ class CoderAgent(Agent):
 
 class DesignerAgent(Agent):
     async def run(self, prompt: str):
-        response = await self.generate_response(prompt)
-        self.speak(response)
-        await self.think(2)
-        self.speak("I've created a cool pixel-art cat sprite and some glowing moon cheese collectibles. Sending them over to the Coder.")
+        # Acknowledge the task and state the plan
+        plan_response = await self.generate_response(f"Acknowledge the design task and briefly state your plan based on this prompt: '{prompt}'")
+        self.speak(plan_response)
+        
+        await self.think(2) # "thinking" about the design
+        
+        # Describe the created assets in more detail
+        assets_prompt = f"Following up on your plan for the prompt '{prompt}', describe the specific visual assets (like sprites, color palettes, UI elements) you have conceptually created. Announce that you are sending them to the Coder. Be creative and descriptive."
+        assets_response = await self.generate_response(assets_prompt)
+        self.speak(assets_response)
 
 class TesterAgent(Agent):
     async def run(self, prompt: str):
