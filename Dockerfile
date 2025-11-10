@@ -40,6 +40,6 @@ COPY --from=builder /app/build ./build
 # Make port 8080 available
 EXPOSE 8080
 
-# Run the Gunicorn server
+# Run the Gunicorn server with enhanced logging for debugging
 # The API_KEY will be injected by the Cloud Run service from Secret Manager.
-CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 main:app
+CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 --log-level=debug --access-logfile=- --error-logfile=- main:app

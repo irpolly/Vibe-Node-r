@@ -9,6 +9,8 @@ import uuid
 import threading
 import vertexai
 
+print("🐍 Python backend starting up...")
+
 # --- App Initialization ---
 app = Flask(__name__, static_folder='build', static_url_path='')
 CORS(app) # Enable Cross-Origin Resource Sharing for local dev
@@ -50,6 +52,11 @@ def get_session(session_id):
     return session
 
 # --- API Endpoints ---
+@app.route('/healthz', methods=['GET'])
+def health_check():
+    """A simple health check endpoint for debugging."""
+    return jsonify({"status": "ok"}), 200
+
 @app.route('/api/deploy', methods=['POST'])
 def deploy_workflow():
     """
@@ -182,3 +189,5 @@ if __name__ == '__main__':
     if not os.path.exists(app.config['ARTIFACT_FOLDER']):
         os.makedirs(app.config['ARTIFACT_FOLDER'])
     app.run(debug=True, port=5000)
+
+print("🐍 Python backend definitions loaded. Gunicorn is taking over.")
