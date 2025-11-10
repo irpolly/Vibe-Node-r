@@ -14,12 +14,47 @@ interface OutputPageProps {
 }
 
 const initialCode = `
-<html style="height: 100%;">
-  <body style="height: 100%; margin: 0; display: flex; align-items: center; justify-content: center; font-family: Inter, sans-serif; background-color: #111827; color: #9ca3af;">
-    <div style="text-align: center; padding: 2rem;">
-      <p>The generated code for the live preview will appear here after the agents finish.</p>
-    </div>
-  </body>
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #111827; /* bg-gray-900 */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: monospace;
+      color: #4b5563; /* gray-600 */
+    }
+    .container {
+      text-align: center;
+    }
+    .spinner {
+      border: 4px solid #4b5563; /* gray-600 */
+      border-top: 4px solid #38bdf8; /* cyan-400 */
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 1rem;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="spinner"></div>
+    <p>Awaiting agent output...</p>
+  </div>
+</body>
 </html>
 `;
 
