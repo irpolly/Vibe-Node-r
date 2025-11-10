@@ -1,4 +1,3 @@
-
 import os
 import time
 from agents import ManagerAgent, CoderAgent, DesignerAgent, TesterAgent, WriterAgent, Agent
@@ -87,37 +86,47 @@ class Session:
         """Saves a file artifact and logs it."""
         try:
             filepath = os.path.join(self.artifact_path, filename)
+            # If content is None, remove the file if it exists
+            if content is None:
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+                    if filename in self.artifacts:
+                        self.artifacts.remove(filename)
+                    print(f"Artifact '{filename}' deleted for session {self.session_id}")
+                return
+
+            # Otherwise, write or overwrite the file
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(content)
-            self.artifacts.append(filename)
-            print(f"Artifact '{filename}' created for session {self.session_id}")
+            
+            if filename not in self.artifacts:
+                self.artifacts.append(filename)
+            print(f"Artifact '{filename}' created/updated for session {self.session_id}")
         except Exception as e:
-            print(f"Error creating artifact for session {self.session_id}: {e}")
+            print(f"Error managing artifact for session {self.session_id}: {e}")
 
-    def _run_async_workflow(self, vibe: str, instructions: str | None = None):
-        """Helper to run the async functions in a new event loop for the thread."""
+    def get_artifact_content(self, filename: str) -> str | None:
+        """Reads the content of a specific artifact file."""
+        try:
+            filepath = os.path.join(self.artifact_path, filename)
+            if os.path.exists(filepath):
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    return f.read()
+            return None
+        except Exception as e:
+            print(f"Error reading artifact {filename}: {e}")
+            return None
+
+    def _run_async_task(self, coro):
+        """Helper to run an async coroutine in a new event loop."""
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            # Initialize Vertex AI SDK within the thread.
-            # It will automatically use the service account credentials and discover
-            # the project and location from the Cloud Run environment.
             vertexai.init()
-            print("✅ Vertex AI SDK initialized.")
-
-            # Now run the agent logic
-            if not self.root_agent_id or self.root_agent_id not in self.agents:
-                raise ValueError("Root agent not found or configured.")
-            
-            root_agent = self.agents[self.root_agent_id]
-            
-            # Run the async execution chain from the root agent
-            loop.run_until_complete(root_agent.run(vibe, instructions))
-            
+            loop.run_until_complete(coro)
             self.status = "COMPLETED"
-            self.add_message("System", "Workflow completed successfully.")
-            print(f"✅ Workflow for session {self.session_id} completed.")
-
+            self.add_message("System", "Task completed successfully.")
+            print(f"✅ Task for session {self.session_id} completed.")
         except Exception as e:
             self.status = "FAILED"
             error_message = f"Workflow failed: {e}"
@@ -127,11 +136,32 @@ class Session:
             loop.close()
 
     def run_workflow(self, vibe: str, instructions: str | None = None):
-        """The main runner for the agentic workflow."""
+        """The main runner for the initial agentic workflow."""
         self.status = "RUNNING"
         self.add_message("System", f"Workflow started with vibe: '{vibe}'")
-        self._run_async_workflow(vibe, instructions)
+        
+        if not self.root_agent_id or self.root_agent_id not in self.agents:
+            self.status = "FAILED"
+            self.add_message("System", "Root agent not found or configured.")
+            return
+            
+        root_agent = self.agents[self.root_agent_id]
+        self._run_async_task(root_agent.run(vibe, instructions))
 
+    def run_instruction(self, instruction: str):
+        """Runs a follow-up instruction for iterative development."""
+        self.status = "RUNNING"
+        self.add_message("System", f"Received new instruction: '{instruction}'")
+
+        # The ManagerAgent is always the entry point for new instructions
+        manager_agent = next((agent for agent in self.agents.values() if isinstance(agent, ManagerAgent)), None)
+        
+        if not manager_agent:
+            self.status = "FAILED"
+            self.add_message("System", "Manager Agent not found in this workflow to handle the instruction.")
+            return
+            
+        self._run_async_task(manager_agent.run_instruction(instruction))
 
     # --- Getters ---
     def get_status(self) -> str:

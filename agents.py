@@ -47,152 +47,173 @@ class Agent:
 # --- Specific Agent Implementations ---
 class ManagerAgent(Agent):
     async def run(self, prompt: str, instructions: str | None = None):
-        self.speak(await self.generate_response(f"Kick off the project for the vibe: '{prompt}'"))
-        await self.think(1.5)
-        
+        self.speak(f"Manager: Kick off the project for the vibe: '{prompt}'")
+        await self.think(1)
+
         writer = next((a for a in self.session.agents.values() if isinstance(a, WriterAgent)), None)
         designer = next((a for a in self.session.agents.values() if isinstance(a, DesignerAgent)), None)
         coder = next((a for a in self.session.agents.values() if isinstance(a, CoderAgent)), None)
         tester = next((a for a in self.session.agents.values() if isinstance(a, TesterAgent)), None)
 
+        if not coder:
+            raise Exception("Coder Agent is required for the workflow.")
+
         # Phase 1: Ideation
+        self.speak("Manager: Tasking Writer and Designer with initial concepts.")
         if writer:
-            await writer.run(f"Draft a short backstory for a game with the vibe: '{prompt}'", instructions)
+            await writer.run(f"Draft a short backstory and opening/closing cutscene text for a game with the vibe: '{prompt}'", instructions)
         if designer:
             await designer.run(f"Create visual concepts for a game with the vibe: '{prompt}'", instructions)
         
-        # Phase 2: Initial Coding
-        if coder:
-            await coder.run_initial_development(prompt, instructions)
+        # Phase 2: Initial Code Generation
+        self.speak("Manager: Tasking Coder with initial development based on the concepts.")
+        await coder.run_finalization(prompt, instructions)
+
+        # Phase 3: Test-Fix Loop
+        max_retries = 2
+        for i in range(max_retries):
+            if not tester:
+                self.speak("Manager: No Tester Agent found in the workflow. Assuming build is good and finalizing.")
+                break
+
+            self.speak(f"Manager: Handing off to Tester for review (Attempt {i+1}/{max_retries}).")
+            tester_response = await tester.run("Review the current artifacts and report PASS or BUG.", instructions)
+
+            if tester_response.startswith("[PASS]"):
+                self.speak("Manager: Tester approved the build. Finalizing workflow.")
+                break  # Exit loop on success
+
+            bug_report = tester_response.replace("[BUG]", "").strip() if tester_response.startswith("[BUG]") else f"Unclear feedback: {tester_response}"
+            self.speak(f"Manager: Tester found an issue. Sending back to Coder. Report: {bug_report}")
+            
+            await coder.run_iteration(f"The tester found an issue. Please fix it. Tester's report: '{bug_report}'")
+
+            if i == max_retries - 1:
+                self.speak(f"Manager: Max retries reached. The latest build may still contain bugs, but we are finalizing anyway.")
         
-        # Phase 3: Testing (merging previous outputs)
-        if tester:
-            conversation_history = "\n".join([f"- {msg.agent_name}: {msg.text}" for msg in self.session.messages])
-            tester_prompt = f"""
-            The team has completed initial work based on the vibe: '{prompt}'.
-            Review the project history below, devise a test plan, and report one plausible bug.
+        self.speak("Manager: Workflow complete. Final artifacts are available.")
 
-            Project History:
-            {conversation_history}
-            """
-            await tester.run(tester_prompt, instructions)
 
-        # Phase 4: Finalization
+    async def run_instruction(self, instruction: str):
+        """Handles a new, iterative instruction from the user."""
+        self.speak(await self.generate_response(f"Received a new instruction: '{instruction}'. I will delegate this to the Coder Agent for implementation."))
+        await self.think(1)
+
+        coder = next((a for a in self.session.agents.values() if isinstance(a, CoderAgent)), None)
         if coder:
-            await coder.run_finalization(prompt, instructions)
-
-        self.speak(await self.generate_response("The team has completed the workflow. The final artifact is ready."))
+            await coder.run_iteration(instruction)
+        else:
+            self.speak("I can't find a Coder Agent in this workflow to handle the instruction.")
 
 
 class CoderAgent(Agent):
-    async def run_initial_development(self, prompt: str, instructions: str | None = None):
-        """Phase 1 of coding: planning and initial implementation."""
-        self.speak(await self.generate_response(f"Explain your plan to start coding a game based on the prompt: '{prompt}'. I will use a JS game library and structure the code into separate HTML, CSS, and JS files. I'll use Howler.js for audio and GSAP for animations."))
-        await self.think(2)
-        
-        self.speak(await self.generate_response("Provide a brief update on building the basic game structure and state that the initial version is ready for testing."))
-        await self.think(2)
-
     async def run_finalization(self, vibe: str, instructions: str | None = None):
-        """Phase 2 of coding: bug fixing and final artifact generation."""
-        self.speak(await self.generate_response("Acknowledging the tester's feedback from the chat log. I will now fix the reported bug while integrating the final assets into a multi-file structure."))
+        """Generates the first version of the code artifacts."""
+        self.speak(await self.generate_response("Acknowledging the team's concepts. I will now generate the first version of the game code and assets."))
         await self.think(2.5)
         
-        self.speak("Generating the final code artifacts now.")
+        self.speak("Generating the initial code artifacts now.")
         
         conversation_history = "\n".join([f"{msg.agent_name}: {msg.text}" for msg in self.session.messages])
-        files_dict = await self._generate_final_code(conversation_history, vibe, instructions)
+        files_dict = await self._generate_code_artifacts(conversation_history, vibe, instructions)
         
         if isinstance(files_dict, dict):
             for filename, content in files_dict.items():
                 self.session.add_artifact(filename, content)
-            self.speak(f"All done. Generated {len(files_dict)} artifacts: {', '.join(files_dict.keys())}.")
+            self.speak(f"Initial version complete. Generated {len(files_dict)} artifacts: {', '.join(files_dict.keys())}.")
         else:
-            # Fallback if the model fails to return a valid JSON object
-            self.session.add_artifact("index.html", files_dict)
-            self.speak("All done, but I had trouble structuring the files. I've generated a single index.html file.")
+            self.session.add_artifact("index.html", "<html><body>Failed to generate valid code.</body></html>")
+            self.speak("I had trouble structuring the files correctly. Please check the logs.")
 
+    async def run_iteration(self, instruction: str):
+        """Handles an iterative change request from the user or manager."""
+        self.speak(await self.generate_response(f"I will now modify the code based on the new instruction: '{instruction}'."))
+        await self.think(2)
+
+        current_files = {filename: self.session.get_artifact_content(filename) for filename in self.session.get_artifacts() if self.session.get_artifact_content(filename)}
+        
+        if not current_files:
+            self.speak("There are no existing code artifacts to modify. I will try to generate from scratch based on the instruction.")
+            await self.run_finalization("New game from instruction", instruction)
+            return
+
+        conversation_history = "\n".join([f"{msg.agent_name}: {msg.text}" for msg in self.session.messages])
+        
+        updated_files_dict = await self._generate_code_artifacts(
+            conversation_history, "N/A - Iteration", instruction, current_files
+        )
+
+        if isinstance(updated_files_dict, dict):
+            deleted_files = set(current_files.keys()) - set(updated_files_dict.keys())
+            for filename, content in updated_files_dict.items():
+                self.session.add_artifact(filename, content)
+            for filename in deleted_files:
+                self.session.add_artifact(filename, None)
+            self.speak(f"Code updated. Modified {len(updated_files_dict)} files and removed {len(deleted_files)} files.")
+        else:
+            self.speak("I failed to apply the changes correctly. The code has not been updated.")
 
     async def run(self, prompt: str, instructions: str | None = None):
         """Full, standalone execution for the Coder agent."""
-        await self.run_initial_development(prompt, instructions)
-        self.speak(await self.generate_response("Initial development complete. Proceeding to finalization without tester feedback."))
+        self.speak(await self.generate_response("Standalone run: I will generate the code based on the prompt."))
         await self.run_finalization(prompt, instructions)
 
-    async def _generate_final_code(self, conversation: str, vibe: str, instructions: str | None = None) -> Dict[str, str] | str:
-        """Generates the final game files as a JSON object mapping filename to content."""
-        
-        instruction_block = (
-            f"USER INSTRUCTIONS FOR STYLE AND THEME:\n{instructions}"
-            if instructions
-            else "The user did not provide specific instructions, so use your best creative judgment and the team's discussion to define the style."
-        )
+    async def _generate_code_artifacts(self, conversation: str, vibe: str, instructions: str | None = None, existing_files: Dict[str, str] | None = None) -> Dict[str, str] | str:
+        instruction_block = f"USER INSTRUCTIONS:\n{instructions}" if instructions else "The user did not provide specific instructions."
+        context_block = ""
+        if existing_files:
+            context_block += "**You are MODIFYING existing code.** Here are the current files:\n"
+            for filename, content in existing_files.items():
+                context_block += f"--- START OF {filename} ---\n{content}\n--- END OF {filename} ---\n\n"
+            context_block += "Your task is to apply the user's latest instruction to this existing code."
+        else:
+            context_block = "You are creating a NEW project from scratch based on the vibe and conversation."
 
         system_instruction = f"""
-        Based on the following development team conversation, the initial "vibe", and user instructions, act as an expert frontend game developer.
-        Your task is to generate all the necessary files for a web-based game. You MUST output a JSON object where keys are the filenames (e.g., "index.html", "style.css", "game.js") and values are the complete string content for each file.
+        You are an expert frontend game developer. Your task is to generate or modify all necessary files for a web-based game and output them as a single JSON object.
 
         **CRITICAL REQUIREMENTS:**
-        1.  The game MUST be playable on both desktop (keyboard/mouse) and mobile (touchscreen) devices.
-        2.  The `index.html` file MUST correctly link to other generated files (e.g., `<link rel="stylesheet" href="style.css">` and `<script src="game.js" type="module"></script>`).
-        3.  The game should be simple, playable, and adhere to the user's instructions.
-        4.  Player movement should feel responsive. For movement, update the player's `flipX` property to track direction.
+        1.  **Output Format**: You MUST output a valid JSON object where keys are filenames (e.g., "index.html", "game.js") and values are the complete string content for each file. Do NOT output anything else.
+        2.  **Game Scope**: The game MUST be a single, simple demo level. It MUST have a brief start screen (e.g., with a "Start" button) and win/lose screens.
+        3.  **Playability**: The game MUST be playable on both desktop (keyboard) and mobile (touchscreen).
+        4.  **File Linking**: `index.html` MUST correctly link to other files (e.g., `<link rel="stylesheet" href="style.css">`, `<script src="game.js" type="module"></script>`).
+        5.  **Responsiveness**: Player movement should feel responsive. Use `player.flipX` to track direction.
 
-        **AVAILABLE TOOLS:**
-        You are encouraged to use these JavaScript libraries via their public CDNs for better results.
-        - **Game Logic**:
-          - **Kaboom.js**: For fun, simple games. Include with `<script src="https://unpkg.com/kaboom@3000.0.1/dist/kaboom.js"></script>`.
-          - **Phaser**: For more complex 2D games. Include with `<script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>`.
-        - **Audio**:
-          - **Howler.js**: **Use this for all sound effects and music.** It is much more reliable than native browser audio. Include with `<script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.4/howler.min.js"></script>`.
-        - **Animation**:
-          - **GSAP**: For high-performance animations and tweens (e.g., UI, transitions, complex movements). Include with `<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>`.
+        **AVAILABLE TOOLS (use public CDNs):**
+        - **Game Logic**: Kaboom.js (`https://unpkg.com/kaboom@3000.0.1/dist/kaboom.js`)
+        - **Audio**: Howler.js (`https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.4/howler.min.js`)
+        - **Animation**: GSAP (`https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js`)
 
         **KABOOM.JS BEST PRACTICES:**
-        - **Initialization**: Do NOT provide a `canvas` property during initialization. Let Kaboom create its own.
-          - Correct: `kaboom({{ background: [0, 0, 0] }});`
-          - Incorrect: `kaboom({{ canvas: document.querySelector("canvas") }});`
-        - **Movement & Physics**: For smooth physics-based movement, use the `.move()` method for continuous movement and `.jump()` for vertical impulses. For special moves like a dash, directly manipulate the `.velocity` property and temporarily set `.gravityScale = 0` for air dashes.
-          - Example Dash Start: `player.gravityScale = 0; player.velocity = vec2(500, 0);`
-          - Example Dash End: `player.gravityScale = 1; player.velocity.x = 0;`
-        - **Direction**: When moving the player left or right, set `player.flipX = true` for left and `player.flipX = false` for right. Use this property to determine dash direction.
+        - **Initialization**: Let Kaboom create its own canvas. `kaboom({{...}})`
+        - **Physics**: Use `.move()` for continuous movement, `.jump()` for jumps. For dashes, manipulate `.velocity` and temporarily set `gravityScale = 0`.
+        - **Direction**: Set `player.flipX = true` (left) and `player.flipX = false` (right).
 
         **GSAP BEST PRACTICES:**
-        - **Targeting**: When animating a Kaboom game object, target the object variable directly, not its internal properties like `children`. Animate standard Kaboom component properties like `scale`, `opacity`, or `color`.
-          - Correct: `gsap.to(myGameObject, {{ scale: 0.9, duration: 0.1 }});`
-          - Incorrect: `gsap.to(myGameObject.children[0], {{ ... }});`
+        - **Targeting**: Animate the Kaboom game object directly, not its internal properties. `gsap.to(myGameObject, {{...}})`
 
+        {context_block}
         {instruction_block}
 
         Ensure your entire output is ONLY the raw JSON object, starting with `{{` and ending with `}}`.
         """
         prompt = f"""
         INITIAL VIBE: "{vibe}"
-
-        AGENT CONVERSATION:
+        AGENT CONVERSATION HISTORY:
         {conversation}
 
-        Generate the file structure as a JSON object now.
+        Generate the complete and updated file structure as a JSON object now. If you are modifying code, return the complete content for ALL necessary files, not just the changed ones.
         """
         try:
             model_name = self.config.get("llm", "gemini-2.5-flash")
             model = GenerativeModel(model_name, system_instruction=system_instruction)
-            # Request JSON output from the model
             response = await model.generate_content_async(prompt, generation_config={"response_mime_type": "application/json"})
-            
             text_response = response.text.strip()
-            
-            # The model should return a clean JSON string, but clean it up just in case
-            if text_response.startswith("```json"):
-                text_response = text_response[7:].strip()
-            if text_response.endswith("```"):
-                text_response = text_response[:-3].strip()
-
-            files_to_create = json.loads(text_response)
-            return files_to_create
+            if text_response.startswith("```json"): text_response = text_response[7:].strip()
+            if text_response.endswith("```"): text_response = text_response[:-3].strip()
+            return json.loads(text_response)
         except (json.JSONDecodeError, AttributeError, Exception) as e:
             print(f"Error processing model response as JSON: {e}")
-            # Fallback for safety, though less likely with response_mime_type
             return f"<html><body>Failed to generate structured game files. Error: {e}</body></html>"
 
 class DesignerAgent(Agent):
@@ -200,17 +221,29 @@ class DesignerAgent(Agent):
         instruction_text = f"Also consider these user instructions: {instructions}" if instructions else ""
         plan_response = await self.generate_response(f"Acknowledge the design task based on this prompt: '{prompt}'. {instruction_text}")
         self.speak(plan_response)
-        
         await self.think(2)
-        
         assets_prompt = f"Following up on your plan for the prompt '{prompt}' and instructions '{instructions}', describe the specific visual assets you have conceptually created. Feel free to suggest concepts that might leverage a game library like Kaboom.js or Phaser for effects or animations, and GSAP for UI animations. Also, suggest sound effects, knowing the Coder can use Howler.js. Announce that you are sending them to the Coder. Be creative and descriptive."
         assets_response = await self.generate_response(assets_prompt)
         self.speak(assets_response)
 
 class TesterAgent(Agent):
-    async def run(self, prompt: str, instructions: str | None = None):
-        response = await self.generate_response(prompt)
+    async def run(self, prompt: str, instructions: str | None = None) -> str:
+        conversation_history = "\n".join([f"- {msg.agent_name}: {msg.text}" for msg in self.session.messages])
+        tester_prompt = f"""
+        You are a QA Tester Agent. Your goal is to review the project and decide if it's ready.
+        Based on the project history below, and the latest code generated by the Coder Agent, perform a conceptual test.
+        Check for common issues like broken logic, missing assets, or features that don't match the original 'vibe'.
+
+        Project History:
+        {conversation_history}
+
+        **Your response MUST start with either `[PASS]` or `[BUG]`.**
+        - If the game seems complete, playable, and meets the requirements, respond with `[PASS]` followed by a brief confirmation message (e.g., "[PASS] The game is playable and meets all core requirements.").
+        - If you find an issue, respond with `[BUG]` followed by a clear, concise, and actionable bug report for the Coder Agent (e.g., "[BUG] The player's jump height is too low to reach the second platform.").
+        """
+        response = await self.generate_response(tester_prompt)
         self.speak(response)
+        return response
 
 class WriterAgent(Agent):
     async def run(self, prompt: str, instructions: str | None = None):

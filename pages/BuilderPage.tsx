@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import ReactFlow, {
   ReactFlowProvider,
@@ -38,93 +37,6 @@ interface BuilderPageProps {
   onFinalizeSuccess: (workflowId: string) => void;
 }
 
-const getLayoutedNodes = (nodesToLayout: Node<NodeData>[], edgesToLayout: Edge[]): Node<NodeData>[] => {
-    if (nodesToLayout.length === 0) return [];
-
-    // 1. Build graph representation for ALL nodes to correctly find dependencies
-    const adj: { [key: string]: string[] } = {};
-    const inDegree: { [key: string]: number } = {};
-
-    nodesToLayout.forEach(node => {
-        adj[node.id] = [];
-        inDegree[node.id] = 0;
-    });
-
-    edgesToLayout.forEach(edge => {
-        if (adj[edge.source]) {
-            adj[edge.source].push(edge.target);
-        }
-        if (inDegree[edge.target] !== undefined) {
-            inDegree[edge.target]++;
-        }
-    });
-
-    // 2. Find the starting queue for the layout. These are nodes with no incoming edges.
-    const queue: string[] = nodesToLayout.filter(node => inDegree[node.id] === 0).map(n => n.id);
-    
-    // 3. Perform topological sort to find layers
-    const layers: { [level: number]: string[] } = {};
-    let level = 0;
-
-    while (queue.length > 0) {
-        const levelSize = queue.length;
-        layers[level] = [];
-        for (let i = 0; i < levelSize; i++) {
-            const u = queue.shift()!;
-            layers[level].push(u);
-            
-            (adj[u] || []).forEach(v => {
-                inDegree[v]--;
-                if (inDegree[v] === 0) {
-                    queue.push(v);
-                }
-            });
-        }
-        level++;
-    }
-
-    // 4. Position the nodes based on layers
-    const COLUMN_WIDTH = 280;
-    const ROW_HEIGHT = 180;
-
-    // FIX: Create a new array of node objects to avoid direct state mutation.
-    // Using JSON.stringify/parse breaks the React components used for icons.
-    // This mapping preserves the icon components.
-    const newNodes = nodesToLayout.map(n => ({ ...n }));
-    const nodeMap = new Map(newNodes.map((n: Node) => [n.id, n]));
-
-    Object.keys(layers).forEach(levelStr => {
-        const currentLevel = parseInt(levelStr, 10);
-        const nodesInLevel = layers[currentLevel];
-        const numNodes = nodesInLevel.length;
-        const levelHeight = (numNodes - 1) * ROW_HEIGHT;
-        const startY = -levelHeight / 2;
-
-        nodesInLevel.forEach((nodeId, i) => {
-            const node = nodeMap.get(nodeId);
-            if (node) {
-                // Override for fixed nodes
-                if (node.id === '1') {
-                    node.position = { x: -150, y: 0 };
-                } else if (node.id === '2') {
-                    node.position = { x: 150, y: 0 };
-                } else {
-                    // Position dynamic nodes based on their layer
-                    // We subtract 1 from the level because level 0 is the trigger, level 1 is the manager.
-                    // The first dynamic layer is level 2.
-                    const xPos = 150 + (currentLevel - 1) * COLUMN_WIDTH;
-                    node.position = {
-                        x: xPos,
-                        y: startY + i * ROW_HEIGHT,
-                    };
-                }
-            }
-        });
-    });
-    
-    return newNodes;
-}
-
 const BuilderPageContent: React.FC<BuilderPageProps> = ({ onFinalizeSuccess }) => {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition, getViewport, setViewport } = useReactFlow();
@@ -144,16 +56,9 @@ const BuilderPageContent: React.FC<BuilderPageProps> = ({ onFinalizeSuccess }) =
     setTimeout(() => setToast(null), 3000);
   }, []);
 
-  const handleAutoAlign = useCallback(() => {
-    const layoutedNodes = getLayoutedNodes(nodes, edges);
-    setNodes(layoutedNodes);
-    showToast("Workflow aligned!", "success");
-  }, [nodes, edges, setNodes, showToast]);
-
   const handleResetLayout = useCallback(() => {
     const reconstructedInitialNodes = reconstructNodeIcons(INITIAL_NODES);
-    const layoutedNodes = getLayoutedNodes(reconstructedInitialNodes, INITIAL_EDGES);
-    setNodes(layoutedNodes);
+    setNodes(reconstructedInitialNodes);
     setEdges(INITIAL_EDGES);
     showToast("Layout reset to default.", "success");
   }, [setNodes, setEdges, showToast]);
@@ -361,7 +266,6 @@ const BuilderPageContent: React.FC<BuilderPageProps> = ({ onFinalizeSuccess }) =
         onToggleDeleteMode={handleToggleDeleteMode}
         isDeletingMode={isDeletingMode}
         onShowSubmission={() => setSubmissionModalOpen(true)}
-        onAutoAlign={handleAutoAlign}
         onResetLayout={handleResetLayout}
         isLoading={isLoading}
       />

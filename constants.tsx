@@ -87,6 +87,24 @@ export const BackIcon = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+export const RotateIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 11.667 0l3.181-3.183m-4.991-2.691V5.006h-4.992v4.992m0 0-3.181-3.182a8.25 8.25 0 0 1 11.667 0l3.181 3.182" />
+  </svg>
+);
+
+export const ZipIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+  </svg>
+);
+
+export const SendIcon = (props: React.SVGProps<SVGSVGElement>) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
+    </svg>
+);
+
 
 export const AGENT_TEMPLATES: Record<string, { icon: React.ReactNode, color: string, config: AgentConfig }> = {
   coder: {
@@ -117,14 +135,14 @@ export const AGENT_TEMPLATES: Record<string, { icon: React.ReactNode, color: str
 };
 
 export const INITIAL_NODES: Node<NodeData>[] = [
-  { id: '1', type: 'triggerNode', position: { x: 0, y: 0 }, data: { label: 'Vibe Input', type: 'trigger', icon: <TriggerIcon className="w-8 h-8 text-amber-400" /> }, deletable: false, draggable: false },
+  { id: '1', type: 'triggerNode', position: { x: -250, y: 0 }, data: { label: 'Vibe Input', type: 'trigger', icon: <TriggerIcon className="w-8 h-8 text-amber-400" /> }, deletable: false, draggable: false },
   { id: '2', type: 'agentNode', position: { x: 0, y: 0 }, data: { type: 'agent', ...AGENT_TEMPLATES.manager, label: 'Manager Agent', templateKey: 'manager' }, deletable: false, draggable: false },
-  { id: '3', type: 'agentNode', position: { x: 0, y: 0 }, data: { type: 'agent', ...AGENT_TEMPLATES.writer, label: 'Writer Agent', templateKey: 'writer' } },
-  { id: '4', type: 'agentNode', position: { x: 0, y: 0 }, data: { type: 'agent', ...AGENT_TEMPLATES.designer, label: 'Designer Agent', templateKey: 'designer' } },
-  { id: '5', type: 'agentNode', position: { x: 0, y: 0 }, data: { type: 'agent', ...AGENT_TEMPLATES.coder, label: 'Coder Agent', templateKey: 'coder' } },
-  { id: '6', type: 'agentNode', position: { x: 0, y: 0 }, data: { type: 'agent', ...AGENT_TEMPLATES.tester, label: 'Tester Agent', templateKey: 'tester' } },
-  { id: '7', type: 'toolNode', position: { x: 0, y: 0 }, data: { label: 'Audio Synthesis', type: 'tool', icon: <ToolIcon className="w-6 h-6" /> } },
-  { id: '8', type: 'toolNode', position: { x: 0, y: 0 }, data: { label: 'Code Generator', type: 'tool', icon: <ToolIcon className="w-6 h-6" /> } },
+  { id: '3', type: 'agentNode', position: { x: 250, y: -180 }, data: { type: 'agent', ...AGENT_TEMPLATES.writer, label: 'Writer Agent', templateKey: 'writer' } },
+  { id: '4', type: 'agentNode', position: { x: 250, y: -60 }, data: { type: 'agent', ...AGENT_TEMPLATES.designer, label: 'Designer Agent', templateKey: 'designer' } },
+  { id: '5', type: 'agentNode', position: { x: 250, y: 60 }, data: { type: 'agent', ...AGENT_TEMPLATES.coder, label: 'Coder Agent', templateKey: 'coder' } },
+  { id: '6', type: 'agentNode', position: { x: 500, y: 60 }, data: { type: 'agent', ...AGENT_TEMPLATES.tester, label: 'Tester Agent', templateKey: 'tester' } },
+  { id: '7', type: 'toolNode', position: { x: 500, y: -60 }, data: { label: 'Audio Synthesis', type: 'tool', icon: <ToolIcon className="w-6 h-6" /> } },
+  { id: '8', type: 'toolNode', position: { x: 250, y: 180 }, data: { label: 'Code Generator', type: 'tool', icon: <ToolIcon className="w-6 h-6" /> } },
 ];
 
 export const INITIAL_EDGES: Edge[] = [
@@ -132,7 +150,8 @@ export const INITIAL_EDGES: Edge[] = [
   { id: 'e2-3', source: '2', target: '3' },
   { id: 'e2-4', source: '2', target: '4' },
   { id: 'e2-5', source: '2', target: '5' },
+  { id: 'e2-8', source: '2', target: '8' },
   { id: 'e4-7', source: '4', target: '7' },
   { id: 'e5-6', source: '5', target: '6' },
-  { id: 'e6-8', source: '6', target: '8' },
+  { id: 'e6-2', source: '6', target: '2', type: 'smoothstep', animated: true, style: { stroke: '#f97316' } },
 ];

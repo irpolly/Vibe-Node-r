@@ -1,4 +1,3 @@
-
 import { SerializedWorkflow } from '../types.ts';
 
 const API_BASE_URL = import.meta.env?.DEV ? "http://127.0.0.1:5000" : "";
@@ -43,6 +42,27 @@ export const runWorkflow = async (workflowId: string, vibe: string, instructions
   }
   return response.json();
 };
+
+/**
+ * Sends a new instruction to an active workflow session for iteration.
+ * @param workflowId The ID of the session to instruct.
+ * @param instruction The new instruction for the agents.
+ * @returns A promise that resolves when the instruction is accepted.
+ */
+export const instructAgent = async (workflowId: string, instruction: string): Promise<{ success: boolean; message: string }> => {
+  const response = await fetch(`${API_BASE_URL}/api/instruct`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workflowId, instruction }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ description: 'An unknown error occurred while sending the instruction.' }));
+    throw new Error(error.description || 'Failed to send instruction');
+  }
+  return response.json();
+};
+
 
 /**
  * Fetches the current status of a running workflow session.

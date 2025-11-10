@@ -1,6 +1,7 @@
-
 import os
-from flask import Flask, request, jsonify, abort, send_from_directory
+import io
+import zipfile
+from flask import Flask, request, jsonify, abort, send_from_directory, send_file
 from flask_cors import CORS
 from session import Session
 import uuid
@@ -72,6 +73,31 @@ def run_session():
     print(f"🚀 Kicking off workflow for session: {session_id}")
     return jsonify({"success": True, "message": "Workflow execution started."}), 202
 
+@app.route('/api/instruct', methods=['POST'])
+def instruct_session():
+    """
+    Sends a new instruction to an active session for iterative changes.
+    """
+    data = request.json
+    session_id = data.get('workflowId')
+    instruction = data.get('instruction')
+
+    if not session_id or not instruction:
+        abort(400, description="Missing 'workflowId' or 'instruction' in request.")
+
+    session = get_session(session_id)
+    
+    if session.is_running():
+        abort(409, description="Session is already running. Please wait for the current task to complete.")
+
+    # Run the instruction in a separate thread
+    thread = threading.Thread(target=session.run_instruction, args=(instruction,))
+    thread.start()
+    
+    print(f"🗣️ Kicking off instruction for session: {session_id}")
+    return jsonify({"success": True, "message": "Instruction received and is being processed."}), 202
+
+
 @app.route('/api/status/<session_id>', methods=['GET'])
 def get_status(session_id):
     """
@@ -94,6 +120,28 @@ def serve_artifact(session_id, filename):
     directory = session.artifact_path
     print(f"Serving artifact: {filename} from {directory}")
     return send_from_directory(directory, filename)
+
+@app.route('/api/artifacts/zip/<session_id>')
+def zip_artifacts(session_id):
+    """Creates a zip file of all artifacts for a session and sends it."""
+    session = get_session(session_id)
+    directory = session.artifact_path
+    
+    memory_file = io.BytesIO()
+    with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for filename in session.get_artifacts():
+            file_path = os.path.join(directory, filename)
+            if os.path.exists(file_path):
+                zf.write(file_path, arcname=filename)
+    
+    memory_file.seek(0)
+    
+    return send_file(
+        memory_file,
+        download_name=f'vibe-artifacts-{session_id}.zip',
+        as_attachment=True,
+        mimetype='application/zip'
+    )
 
 
 # --- Frontend Serving ---
