@@ -1,4 +1,3 @@
-#// Grok got your weights!!!
 import asyncio
 import json
 from typing import TYPE_CHECKING, Dict, Any
@@ -86,7 +85,8 @@ class ManagerAgent(Agent):
             bug_report = tester_response.replace("[BUG]", "").strip() if tester_response.startswith("[BUG]") else f"Unclear feedback: {tester_response}"
             self.speak(f"Manager: Tester found an issue. Sending back to Coder. Report: {bug_report}")
             
-            await coder.run_iteration(f"The tester found an issue. Please fix it. Tester's report: '{bug_report}'")
+            # Pass the original prompt (vibe) back to the coder for context
+            await coder.run_iteration(f"The tester found an issue. Please fix it. Tester's report: '{bug_report}'", prompt)
 
             if i == max_retries - 1:
                 self.speak(f"Manager: Max retries reached. The latest build may still contain bugs, but we are finalizing anyway.")
@@ -101,7 +101,8 @@ class ManagerAgent(Agent):
 
         coder = next((a for a in self.session.agents.values() if isinstance(a, CoderAgent)), None)
         if coder:
-            await coder.run_iteration(instruction)
+            # For user instructions, the original vibe isn't as critical as the new command.
+            await coder.run_iteration(instruction, "User-directed change")
         else:
             self.speak("I can't find a Coder Agent in this workflow to handle the instruction.")
 
@@ -117,7 +118,7 @@ class CoderAgent(Agent):
         conversation_history = "\n".join([f"{msg.agent_name}: {msg.text}" for msg in self.session.messages])
         files_dict = await self._generate_code_artifacts(conversation_history, vibe, instructions)
         
-        if isinstance(files_dict, dict):
+        if isinstance(files_dict, dict) and files_dict:
             for filename, content in files_dict.items():
                 self.session.add_artifact(filename, content)
             self.speak(f"Initial version complete. Generated {len(files_dict)} artifacts: {', '.join(files_dict.keys())}.")
@@ -125,7 +126,7 @@ class CoderAgent(Agent):
             self.session.add_artifact("index.html", "<html><body>Failed to generate valid code.</body></html>")
             self.speak("I had trouble structuring the files correctly. Please check the logs.")
 
-    async def run_iteration(self, instruction: str):
+    async def run_iteration(self, instruction: str, vibe: str):
         """Handles an iterative change request from the user or manager."""
         self.speak(await self.generate_response(f"I will now modify the code based on the new instruction: '{instruction}'."))
         await self.think(2)
@@ -140,10 +141,10 @@ class CoderAgent(Agent):
         conversation_history = "\n".join([f"{msg.agent_name}: {msg.text}" for msg in self.session.messages])
         
         updated_files_dict = await self._generate_code_artifacts(
-            conversation_history, "N/A - Iteration", instruction, current_files
+            conversation_history, vibe, instruction, current_files
         )
 
-        if isinstance(updated_files_dict, dict):
+        if isinstance(updated_files_dict, dict) and updated_files_dict:
             deleted_files = set(current_files.keys()) - set(updated_files_dict.keys())
             for filename, content in updated_files_dict.items():
                 self.session.add_artifact(filename, content)
