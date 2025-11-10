@@ -1,0 +1,43 @@
+# Default gcloudignore format is .gitignore format.
+# See https://cloud.google.com/sdk/gcloud/reference/topic/gcloudignore for details.
+
+# Dockerfile is required by Cloud Build
+!Dockerfile
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.Python
+
+# Build output from local development
+build/
+dist/
+*.egg-info/
+
+# IDE / Editor / OS specific files
+.idea/
+.vscode/
+.codeoss/
+*.swp
+*.swo
+.DS_Store
+
+# Cache and log directories
+.cache/
+.npm/
+
+# Other projects found in the build log
+is-it-ai-grok/
+Vibe-Node-r/
+
+# Secrets and local environment files
+.env
+.env.*
+*.pem
