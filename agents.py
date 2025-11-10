@@ -1,6 +1,7 @@
 
 #// Grok got your weights!!!
 import asyncio
+import json
 from typing import TYPE_CHECKING, Dict, Any
 from vertexai.generative_models import GenerativeModel
 
@@ -90,7 +91,7 @@ class ManagerAgent(Agent):
 class CoderAgent(Agent):
     async def run_initial_development(self, prompt: str, instructions: str | None = None):
         """Phase 1 of coding: planning and initial implementation."""
-        self.speak(await self.generate_response(f"Explain your plan to start coding a game based on the prompt: '{prompt}'. I will consider using a JS game library like Kaboom.js or Phaser for a better result."))
+        self.speak(await self.generate_response(f"Explain your plan to start coding a game based on the prompt: '{prompt}'. I will consider using a JS game library like Kaboom.js or Phaser for a better result and will structure the code into separate HTML, CSS, and JS files."))
         await self.think(2)
         
         self.speak(await self.generate_response("Provide a brief update on building the basic game structure and state that the initial version is ready for testing."))
@@ -98,15 +99,23 @@ class CoderAgent(Agent):
 
     async def run_finalization(self, vibe: str, instructions: str | None = None):
         """Phase 2 of coding: bug fixing and final artifact generation."""
-        self.speak(await self.generate_response("Acknowledging the tester's feedback from the chat log. I will now fix the reported bug while integrating the final assets."))
+        self.speak(await self.generate_response("Acknowledging the tester's feedback from the chat log. I will now fix the reported bug while integrating the final assets into a multi-file structure."))
         await self.think(2.5)
         
-        self.speak("Generating the final code artifact now.")
+        self.speak("Generating the final code artifacts now.")
         
         conversation_history = "\n".join([f"{msg.agent_name}: {msg.text}" for msg in self.session.messages])
-        final_code = await self._generate_final_code(conversation_history, vibe, instructions)
-        self.session.add_artifact("index.html", final_code)
-        self.speak("All done. Final code generated and ready for the run window.")
+        files_dict = await self._generate_final_code(conversation_history, vibe, instructions)
+        
+        if isinstance(files_dict, dict):
+            for filename, content in files_dict.items():
+                self.session.add_artifact(filename, content)
+            self.speak(f"All done. Generated {len(files_dict)} artifacts: {', '.join(files_dict.keys())}.")
+        else:
+            # Fallback if the model fails to return a valid JSON object
+            self.session.add_artifact("index.html", files_dict)
+            self.speak("All done, but I had trouble structuring the files. I've generated a single index.html file.")
+
 
     async def run(self, prompt: str, instructions: str | None = None):
         """Full, standalone execution for the Coder agent."""
@@ -114,8 +123,8 @@ class CoderAgent(Agent):
         self.speak(await self.generate_response("Initial development complete. Proceeding to finalization without tester feedback."))
         await self.run_finalization(prompt, instructions)
 
-    async def _generate_final_code(self, conversation: str, vibe: str, instructions: str | None = None) -> str:
-        """Generates the final HTML game file using the Vertex AI Gemini API."""
+    async def _generate_final_code(self, conversation: str, vibe: str, instructions: str | None = None) -> Dict[str, str] | str:
+        """Generates the final game files as a JSON object mapping filename to content."""
         
         instruction_block = (
             f"USER INSTRUCTIONS FOR STYLE AND THEME:\n{instructions}"
@@ -125,23 +134,26 @@ class CoderAgent(Agent):
 
         system_instruction = f"""
         Based on the following development team conversation, the initial "vibe", and user instructions, act as an expert frontend game developer.
-        Your task is to generate a complete, single-file HTML document that implements the described game.
+        Your task is to generate all the necessary files for a web-based game. You MUST output a JSON object where keys are the filenames (e.g., "index.html", "style.css", "game.js") and values are the complete string content for each file.
 
         **CRITICAL REQUIREMENTS:**
-        1. The game MUST be playable on both desktop (keyboard/mouse) and mobile (touchscreen) devices. Implement controls for both.
-        2. The HTML file must include all necessary CSS and JavaScript within it.
-        3. The game should be simple, playable, and adhere to the user's instructions.
+        1.  The game MUST be playable on both desktop (keyboard/mouse) and mobile (touchscreen) devices.
+        2.  The `index.html` file MUST correctly link to other generated files (e.g., `<link rel="stylesheet" href="style.css">` and `<script src="game.js" type="module"></script>`).
+        3.  The game should be simple, playable, and adhere to the user's instructions.
 
         **AVAILABLE TOOLS:**
-        To create more engaging and complex games, you are encouraged to use a JavaScript game library. These libraries are hosted locally by the application.
-        - **Kaboom.js**: For fun, simple games. To use it, include this tag in your HTML: `<script src="/api/libs/kaboom.js"></script>`
-        - **Phaser**: For more complex 2D games. To use it, include this tag in your HTML: `<script src="/api/libs/phaser.min.js"></script>`
+        You are encouraged to use a JavaScript game library. These are hosted locally.
+        - **Kaboom.js**: For fun, simple games. Include with `<script src="/api/libs/kaboom.js"></script>`.
+        - **Phaser**: For more complex 2D games. Include with `<script src="/api/libs/phaser.min.js"></script>`.
 
-        When you choose a library, you MUST include the corresponding `<script>` tag in the `<head>` of the generated HTML. Do not use any other external libraries or CDNs.
+        **KABOOM.JS BEST PRACTICE:**
+        When using Kaboom.js, do NOT provide a `canvas` property during initialization. Let Kaboom create and manage its own canvas.
+        - **Correct:** `kaboom({{ background: [0, 0, 0] }});`
+        - **Incorrect:** `kaboom({{ canvas: document.querySelector("canvas") }});`
 
         {instruction_block}
 
-        Ensure the output is ONLY the HTML code, starting with <!DOCTYPE html>.
+        Ensure your entire output is ONLY the raw JSON object, starting with `{{` and ending with `}}`.
         """
         prompt = f"""
         INITIAL VIBE: "{vibe}"
@@ -149,20 +161,27 @@ class CoderAgent(Agent):
         AGENT CONVERSATION:
         {conversation}
 
-        Generate the HTML file now.
+        Generate the file structure as a JSON object now.
         """
         try:
             model = GenerativeModel(MODEL_NAME, system_instruction=system_instruction)
-            response = await model.generate_content_async(prompt)
-            text = response.text.strip()
-            if '```html' in text:
-                text = text.split('```html')[1]
-            if '```' in text:
-                text = text.split('```')[0]
-            return text.strip()
-        except Exception as e:
-            print(f"Error generating final code: {e}")
-            return f"<html><body>Error generating game code: {e}</body></html>"
+            # Request JSON output from the model
+            response = await model.generate_content_async(prompt, generation_config={"response_mime_type": "application/json"})
+            
+            text_response = response.text.strip()
+            
+            # The model should return a clean JSON string, but clean it up just in case
+            if text_response.startswith("```json"):
+                text_response = text_response[7:].strip()
+            if text_response.endswith("```"):
+                text_response = text_response[:-3].strip()
+
+            files_to_create = json.loads(text_response)
+            return files_to_create
+        except (json.JSONDecodeError, AttributeError, Exception) as e:
+            print(f"Error processing model response as JSON: {e}")
+            # Fallback for safety, though less likely with response_mime_type
+            return f"<html><body>Failed to generate structured game files. Error: {e}</body></html>"
 
 class DesignerAgent(Agent):
     async def run(self, prompt: str, instructions: str | None = None):
@@ -184,6 +203,6 @@ class TesterAgent(Agent):
 class WriterAgent(Agent):
     async def run(self, prompt: str, instructions: str | None = None):
         instruction_text = f"Take these user instructions into account: {instructions}" if instructions else ""
-        full_prompt = f"{prompt}. {instruction_text} You can suggest story elements that imply game mechanics, knowing the Coder can use game libraries to implement them."
+        full_prompt = f"{prompt}. {instruction_text} You can suggest story elements that imply game mechanics, knowing the Coder can use game libraries and separate JS files to implement them."
         response = await self.generate_response(full_prompt)
         self.speak(response)
