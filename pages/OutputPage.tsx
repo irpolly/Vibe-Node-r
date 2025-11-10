@@ -5,7 +5,7 @@ import Spinner from '../components/ui/Spinner.tsx';
 import Toast from '../components/ui/Toast.tsx';
 import { GitHubIcon, DownloadIcon, BackIcon, ManagerIcon, CodeIcon, DesignIcon, TestIcon, WriterIcon, ChatLogIcon } from '../constants.tsx';
 import { ChatMessage } from '../types.ts';
-import { runWorkflow, getSessionStatus, getArtifactContent } from '../services/adkApi.ts';
+import { runWorkflow, getSessionStatus } from '../services/adkApi.ts';
 
 interface OutputPageProps {
   onBack: () => void;
@@ -37,10 +37,12 @@ const agentColors: Record<string, string> = {
 
 const OutputPage: React.FC<OutputPageProps> = ({ onBack, workflowId }) => {
   const [vibe, setVibe] = useState('');
+  const [instructions, setInstructions] = useState('');
   const [code, setCode] = useState(initialCode);
   const [isLoading, setIsLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [agentMessages, setAgentMessages] = useState<ChatMessage[]>([]);
+  const [artifacts, setArtifacts] = useState<string[]>([]);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const pollingIntervalRef = useRef<number | null>(null);
@@ -90,18 +92,20 @@ const OutputPage: React.FC<OutputPageProps> = ({ onBack, workflowId }) => {
         }
         setIsLoading(false);
         showToast(`Workflow ${statusData.status.toLowerCase()}!`, statusData.status === 'COMPLETED' ? 'success' : 'error');
+        
+        setArtifacts(statusData.artifacts || []);
 
         if (statusData.status === 'COMPLETED' && statusData.artifacts.length > 0) {
             const codeArtifact = statusData.artifacts.find((a: string) => a.endsWith('.html'));
             if (codeArtifact && workflowId) {
-                const artifactContent = await getArtifactContent(workflowId, codeArtifact);
+                const response = await fetch(`/api/artifacts/${workflowId}/${codeArtifact}`);
+                const artifactContent = await response.text();
                 setCode(artifactContent);
             }
         }
       }
     } catch (error: any) {
       console.error("Polling failed:", error);
-      // Stop polling on persistent error
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
       }
@@ -122,18 +126,18 @@ const OutputPage: React.FC<OutputPageProps> = ({ onBack, workflowId }) => {
 
     setIsLoading(true);
     setAgentMessages([]);
+    setArtifacts([]);
     setCode(initialCode);
 
     try {
-      await runWorkflow(workflowId, vibe);
+      await runWorkflow(workflowId, vibe, instructions);
       
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
       }
-      // Start polling
       pollingIntervalRef.current = window.setInterval(() => {
         pollStatus(workflowId);
-      }, 2000); // Poll every 2 seconds
+      }, 2000);
     } catch (error: any) {
       setIsLoading(false);
       showToast(error.message, 'error');
@@ -161,27 +165,6 @@ const OutputPage: React.FC<OutputPageProps> = ({ onBack, workflowId }) => {
     showToast('Chat log saved!', 'success');
   };
 
-  const handleSaveProject = () => {
-    if (code === initialCode || isLoading) {
-      showToast('No project code to save.', 'error');
-      return;
-    }
-    const blob = new Blob([code], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'index.html';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showToast('Project saved as index.html!', 'success');
-  };
-
-  const handleDeploy = (platform: 'GitHub') => {
-    showToast(`Simulating deployment to ${platform}...`, 'success');
-  };
-
   return (
     <div className="bg-gray-900 text-white w-screen h-screen flex flex-col">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
@@ -193,14 +176,15 @@ const OutputPage: React.FC<OutputPageProps> = ({ onBack, workflowId }) => {
         </div>
         <div className="flex items-center gap-3">
           <Button onClick={handleSaveChatLog} variant="secondary"><ChatLogIcon className="w-5 h-5" /> Save Chat Log</Button>
-          <Button onClick={handleSaveProject} variant="secondary"><DownloadIcon className="w-5 h-5" /> Save Project</Button>
-          <Button onClick={() => handleDeploy('GitHub')} variant="secondary"><GitHubIcon className="w-5 h-5" /> Deploy to GitHub</Button>
+          <a href="https://github.com/new?template_name=vibe-coding-hackathon&template_owner=google-cloud-run-hackathon" target="_blank" rel="noopener noreferrer">
+            <Button variant="secondary"><GitHubIcon className="w-5 h-5" /> Create Repo</Button>
+          </a>
         </div>
       </header>
 
       <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 overflow-hidden">
         {/* Left Column */}
-        <div className="flex flex-col gap-4 h-full">
+        <div className="flex flex-col gap-4 h-full overflow-y-auto pr-2">
           <div className="flex-shrink-0">
             <label htmlFor="vibe-input" className="block text-sm font-medium text-gray-300 mb-2">1. Vibe Input</label>
             <div className="flex gap-2">
@@ -210,14 +194,25 @@ const OutputPage: React.FC<OutputPageProps> = ({ onBack, workflowId }) => {
                 value={vibe}
                 onChange={(e) => setVibe(e.target.value)}
                 className="flex-grow bg-gray-700 border border-gray-600 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                placeholder="e.g., a simple breakout game with a neon aesthetic"
+                placeholder="e.g., a simple breakout game"
               />
               <Button onClick={handleRun} disabled={isLoading} className="px-6">
                 {isLoading ? <Spinner /> : 'Run'}
               </Button>
             </div>
           </div>
-          <div className="flex-1 bg-gray-800 rounded-lg overflow-hidden border border-gray-700 relative flex flex-col">
+          <div className="flex-shrink-0">
+            <label htmlFor="instructions-input" className="block text-sm font-medium text-gray-300 mb-2">2. Specific Instructions (Optional)</label>
+            <textarea
+                id="instructions-input"
+                value={instructions}
+                onChange={(e) => setInstructions(e.target.value)}
+                rows={3}
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                placeholder="e.g., 'Use a dark, minimalist theme with blue accents. The main character should be a glowing orb. Avoid pixel art.'"
+            />
+          </div>
+          <div className="flex-1 bg-gray-800 rounded-lg overflow-hidden border border-gray-700 relative flex flex-col min-h-[300px]">
             <div className="flex-shrink-0 bg-gray-900/50 p-2 text-sm text-gray-300 border-b border-gray-700">Agent Output</div>
             <div className="h-full w-full overflow-auto p-4 space-y-4">
               {agentMessages.map((msg) => (
@@ -253,9 +248,9 @@ const OutputPage: React.FC<OutputPageProps> = ({ onBack, workflowId }) => {
         </div>
 
         {/* Right Column */}
-        <div className="flex flex-col h-full">
-          <h2 className="text-lg font-semibold mb-2 text-gray-300">2. Live Preview</h2>
-          <div className="flex-1 bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+        <div className="flex flex-col h-full overflow-y-auto pr-2">
+          <h2 className="text-lg font-semibold mb-2 text-gray-300">3. Live Preview</h2>
+          <div className="flex-1 bg-gray-800 rounded-lg border border-gray-700 overflow-hidden min-h-[300px]">
             <iframe
               ref={iframeRef}
               title="Live Preview"
@@ -263,6 +258,25 @@ const OutputPage: React.FC<OutputPageProps> = ({ onBack, workflowId }) => {
               sandbox="allow-scripts"
             />
           </div>
+          {artifacts.length > 0 && (
+            <div className="mt-4 flex-shrink-0">
+                <h2 className="text-lg font-semibold mb-2 text-gray-300">4. Generated Artifacts</h2>
+                <div className="bg-gray-800 rounded-lg border border-gray-700 p-3 space-y-2">
+                    {artifacts.map(artifact => (
+                        <a
+                            key={artifact}
+                            href={`/api/artifacts/${workflowId}/${artifact}`}
+                            download={artifact}
+                            className="flex items-center justify-between p-2 bg-gray-700 rounded-md hover:bg-gray-600 transition-colors"
+                            aria-label={`Download ${artifact}`}
+                        >
+                            <span className="text-gray-200">{artifact}</span>
+                            <DownloadIcon className="w-5 h-5 text-cyan-400" />
+                        </a>
+                    ))}
+                </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

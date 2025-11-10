@@ -54,6 +54,7 @@ def run_session():
     data = request.json
     session_id = data.get('workflowId')
     vibe = data.get('vibe')
+    instructions = data.get('instructions') # Can be None
 
     if not session_id or not vibe:
         abort(400, description="Missing 'workflowId' or 'vibe' in request.")
@@ -64,7 +65,7 @@ def run_session():
         abort(409, description="Session is already running.")
 
     # Run the workflow in a separate thread to avoid blocking the request
-    thread = threading.Thread(target=session.run_workflow, args=(vibe,))
+    thread = threading.Thread(target=session.run_workflow, args=(vibe, instructions))
     thread.start()
     
     print(f"🚀 Kicking off workflow for session: {session_id}")

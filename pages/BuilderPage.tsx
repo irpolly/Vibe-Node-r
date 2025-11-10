@@ -38,6 +38,74 @@ interface BuilderPageProps {
   onFinalizeSuccess: (workflowId: string) => void;
 }
 
+const getLayoutedNodes = (nodesToLayout: Node<NodeData>[], edgesToLayout: Edge[]): Node<NodeData>[] => {
+    if (nodesToLayout.length === 0) return [];
+
+    const adj: { [key: string]: string[] } = {};
+    const inDegree: { [key: string]: number } = {};
+
+    nodesToLayout.forEach(node => {
+        adj[node.id] = [];
+        inDegree[node.id] = 0;
+    });
+
+    edgesToLayout.forEach(edge => {
+        if (adj[edge.source]) {
+            adj[edge.source].push(edge.target);
+        }
+        if (inDegree[edge.target] !== undefined) {
+            inDegree[edge.target]++;
+        }
+    });
+
+    const queue: string[] = nodesToLayout.filter(node => inDegree[node.id] === 0).map(n => n.id);
+    
+    const layers: { [level: number]: string[] } = {};
+    let level = 0;
+
+    while (queue.length > 0) {
+        const levelSize = queue.length;
+        layers[level] = [];
+        for (let i = 0; i < levelSize; i++) {
+            const u = queue.shift()!;
+            layers[level].push(u);
+            
+            (adj[u] || []).forEach(v => {
+                inDegree[v]--;
+                if (inDegree[v] === 0) {
+                    queue.push(v);
+                }
+            });
+        }
+        level++;
+    }
+
+    const COLUMN_WIDTH = 280;
+    const ROW_HEIGHT = 180;
+
+    const newNodes = [...nodesToLayout];
+    const nodeMap = new Map(newNodes.map(n => [n.id, n]));
+
+    Object.keys(layers).forEach(levelStr => {
+        const currentLevel = parseInt(levelStr, 10);
+        const nodesInLevel = layers[currentLevel];
+        const numNodes = nodesInLevel.length;
+        const levelHeight = (numNodes - 1) * ROW_HEIGHT;
+        const startY = -levelHeight / 2;
+
+        nodesInLevel.forEach((nodeId, i) => {
+            const node = nodeMap.get(nodeId);
+            if (node) {
+                node.position = {
+                    x: currentLevel * COLUMN_WIDTH,
+                    y: startY + i * ROW_HEIGHT,
+                };
+            }
+        });
+    });
+    return newNodes;
+}
+
 const BuilderPageContent: React.FC<BuilderPageProps> = ({ onFinalizeSuccess }) => {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition, getViewport, setViewport } = useReactFlow();
@@ -58,77 +126,17 @@ const BuilderPageContent: React.FC<BuilderPageProps> = ({ onFinalizeSuccess }) =
   };
 
   const handleAutoAlign = useCallback(() => {
-    const localNodes = INITIAL_NODES;
-    const localEdges = INITIAL_EDGES;
-
-    if (localNodes.length === 0) return;
-
-    const adj: { [key: string]: string[] } = {};
-    const inDegree: { [key: string]: number } = {};
-
-    localNodes.forEach(node => {
-        adj[node.id] = [];
-        inDegree[node.id] = 0;
-    });
-
-    localEdges.forEach(edge => {
-        if (adj[edge.source]) {
-            adj[edge.source].push(edge.target);
-        }
-        if (inDegree[edge.target] !== undefined) {
-            inDegree[edge.target]++;
-        }
-    });
-
-    const queue: string[] = localNodes.filter(node => inDegree[node.id] === 0).map(n => n.id);
-    
-    const layers: { [level: number]: string[] } = {};
-    let level = 0;
-
-    while (queue.length > 0) {
-        const levelSize = queue.length;
-        layers[level] = [];
-        for (let i = 0; i < levelSize; i++) {
-            const u = queue.shift()!;
-            layers[level].push(u);
-            
-            adj[u]?.forEach(v => {
-                inDegree[v]--;
-                if (inDegree[v] === 0) {
-                    queue.push(v);
-                }
-            });
-        }
-        level++;
-    }
-
-    const COLUMN_WIDTH = 280;
-    const ROW_HEIGHT = 180;
-
-    const newNodes = [...localNodes];
-    const nodeMap = new Map(newNodes.map(n => [n.id, n]));
-
-    Object.keys(layers).forEach(levelStr => {
-        const currentLevel = parseInt(levelStr, 10);
-        const nodesInLevel = layers[currentLevel];
-        const numNodes = nodesInLevel.length;
-        const levelHeight = (numNodes - 1) * ROW_HEIGHT;
-        const startY = -levelHeight / 2;
-
-        nodesInLevel.forEach((nodeId, i) => {
-            const node = nodeMap.get(nodeId);
-            if (node) {
-                node.position = {
-                    x: currentLevel * COLUMN_WIDTH,
-                    y: startY + i * ROW_HEIGHT,
-                };
-            }
-        });
-    });
-
-    setNodes(newNodes);
-    setEdges(localEdges);
+    const layoutedNodes = getLayoutedNodes(nodes, edges);
+    setNodes(layoutedNodes);
     showToast("Workflow aligned!", "success");
+  }, [nodes, edges, setNodes]);
+
+  const handleResetLayout = useCallback(() => {
+    const reconstructedInitialNodes = reconstructNodeIcons(INITIAL_NODES);
+    const layoutedNodes = getLayoutedNodes(reconstructedInitialNodes, INITIAL_EDGES);
+    setNodes(layoutedNodes);
+    setEdges(INITIAL_EDGES);
+    showToast("Layout reset to default.", "success");
   }, [setNodes, setEdges]);
 
   // Auto-load session on mount
@@ -146,10 +154,10 @@ const BuilderPageContent: React.FC<BuilderPageProps> = ({ onFinalizeSuccess }) =
         showToast("Restored previous session.", "success");
       } catch (e) {
         console.error("Could not restore session:", e);
-        handleAutoAlign();
+        handleResetLayout();
       }
     } else {
-        handleAutoAlign();
+        handleResetLayout();
     }
     setIsInitialLoad(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -327,6 +335,7 @@ const BuilderPageContent: React.FC<BuilderPageProps> = ({ onFinalizeSuccess }) =
         isDeletingMode={isDeletingMode}
         onShowSubmission={() => setSubmissionModalOpen(true)}
         onAutoAlign={handleAutoAlign}
+        onResetLayout={handleResetLayout}
         isLoading={isLoading}
       />
       <div className="flex flex-1 h-full">

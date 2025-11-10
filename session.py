@@ -94,7 +94,7 @@ class Session:
         except Exception as e:
             print(f"Error creating artifact for session {self.session_id}: {e}")
 
-    def _run_async_workflow(self, vibe: str):
+    def _run_async_workflow(self, vibe: str, instructions: str | None = None):
         """Helper to run the async functions in a new event loop for the thread."""
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -112,7 +112,7 @@ class Session:
             root_agent = self.agents[self.root_agent_id]
             
             # Run the async execution chain from the root agent
-            loop.run_until_complete(root_agent.run(vibe))
+            loop.run_until_complete(root_agent.run(vibe, instructions))
             
             self.status = "COMPLETED"
             self.add_message("System", "Workflow completed successfully.")
@@ -126,11 +126,11 @@ class Session:
         finally:
             loop.close()
 
-    def run_workflow(self, vibe: str):
+    def run_workflow(self, vibe: str, instructions: str | None = None):
         """The main runner for the agentic workflow."""
         self.status = "RUNNING"
         self.add_message("System", f"Workflow started with vibe: '{vibe}'")
-        self._run_async_workflow(vibe)
+        self._run_async_workflow(vibe, instructions)
 
 
     # --- Getters ---

@@ -1,3 +1,4 @@
+
 import { SerializedWorkflow } from '../types.ts';
 
 const API_BASE_URL = import.meta.env?.DEV ? "http://127.0.0.1:5000" : "";
@@ -26,13 +27,14 @@ export const deployWorkflow = async (workflowData: Omit<SerializedWorkflow, 'vie
  * Starts the execution of a deployed workflow.
  * @param workflowId The ID of the session to run.
  * @param vibe The user's input prompt.
+ * @param instructions Optional detailed instructions for the agents.
  * @returns A promise that resolves when the run command is accepted.
  */
-export const runWorkflow = async (workflowId: string, vibe: string): Promise<{ success: boolean; message: string }> => {
+export const runWorkflow = async (workflowId: string, vibe: string, instructions: string): Promise<{ success: boolean; message: string }> => {
   const response = await fetch(`${API_BASE_URL}/api/run`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ workflowId, vibe }),
+    body: JSON.stringify({ workflowId, vibe, instructions }),
   });
 
   if (!response.ok) {
@@ -50,7 +52,6 @@ export const runWorkflow = async (workflowId: string, vibe: string): Promise<{ s
 export const getSessionStatus = async (workflowId: string) => {
   const response = await fetch(`${API_BASE_URL}/api/status/${workflowId}`);
   if (!response.ok) {
-    // FIX: Implement robust error handling for API calls.
     const errorText = await response.text();
     console.error("Failed to fetch session status:", response.status, errorText);
     throw new Error(`Failed to fetch session status (${response.status})`);
