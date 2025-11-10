@@ -173,7 +173,11 @@ def zip_artifacts(session_id):
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve(path):
-    if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
+    full_path = os.path.join(app.static_folder, path)
+    # Use isfile to prevent a 500 error if the path is a directory.
+    # os.path.exists returns True for directories, but send_from_directory
+    # raises an exception, which can crash the server or cause health check failures.
+    if path != "" and os.path.isfile(full_path):
         return send_from_directory(app.static_folder, path)
     else:
         return send_from_directory(app.static_folder, 'index.html')
