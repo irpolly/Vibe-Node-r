@@ -30,7 +30,7 @@
 2.  **Deploy**: When you click "Finalize & Run," the workflow configuration is sent to the Flask backend, which spins up a new, isolated `Session`.
 3.  **Execute**: On the **Output Page**, you provide a "vibe" and optional instructions. This kicks off the root agent (typically the `Manager Agent`) in the session.
 4.  **Collaborate**: The agents begin their work, communicating with each other and using the Gemini API to perform their specialized tasks—from writing a story to designing assets and generating code.
-5.  **Generate**: The `Coder Agent` writes the necessary HTML, CSS, and JavaScript files and saves them as artifacts within the session.
+5.  **Generate**: The `Coder Agent` writes a complete project structure—typically `index.html`, `style.css`, and `game.js`—and saves them as artifacts within the session.
 6.  **Preview & Iterate**: The generated `index.html` is loaded into the live preview emulator. You can then send new text-based instructions to the agents to refine or change the application.
 
 ## 🚀 Getting Started Locally
@@ -127,3 +127,6 @@ The frontend development server will start, typically on `http://127.0.0.1:5173`
 This application is pre-configured for easy deployment to serverless platforms like **Google Cloud Run**.
 
 The included `Dockerfile` creates a production-ready container that builds the frontend, installs the backend dependencies, and runs the application with a Gunicorn server. The `API_KEY` can be securely injected as an environment variable from a secret manager.
+]]>
+    </content>
+  

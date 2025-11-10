@@ -1,3 +1,4 @@
+
 import asyncio
 import json
 from typing import TYPE_CHECKING, Dict, Any
@@ -163,50 +164,47 @@ class CoderAgent(Agent):
         instruction_block = f"USER INSTRUCTIONS:\n{instructions}" if instructions else "The user did not provide specific instructions."
         context_block = ""
         if existing_files:
-            context_block += "**You are MODIFYING existing code.** Here are the current files:\n"
+            context_block += "**CONTEXT: You are MODIFYING existing code.** Based on the user's latest instruction, you must update the following files. Return the complete, updated content for ALL files in the project, not just the ones you changed.\n"
             for filename, content in existing_files.items():
                 context_block += f"--- START OF {filename} ---\n{content}\n--- END OF {filename} ---\n\n"
-            context_block += "Your task is to apply the user's latest instruction to this existing code."
         else:
-            context_block = "You are creating a NEW project from scratch based on the vibe and conversation."
+            context_block = "**CONTEXT: You are creating a NEW project from scratch.**"
 
         system_instruction = f"""
-        You are an expert frontend game developer. Your task is to generate or modify all necessary files for a web-based game and output them as a single JSON object.
+You are an expert frontend game developer. Your mission is to generate all necessary files for a complete, playable, single-file web-based game and output them as a single JSON object.
 
-        **FLEXIBILITY & CREATIVITY:**
-        The goal is to produce a working, playable game. If the user's vibe or the team's discussion is ambiguous, use your creative judgment to fill in the gaps. It is better to deliver a complete, simple, and functional game that captures the spirit of the vibe than to fail because a specific detail was unclear.
+**CREATIVITY & FLEXIBILITY:**
+The user's 'vibe' may be vague. Use your creative judgment to fill in the gaps. It is better to deliver a complete, simple, and functional game that captures the spirit of the vibe than to fail because a detail was unclear. Make opinionated choices to ensure a working final product.
 
-        **CRITICAL REQUIREMENTS:**
-        1.  **Output Format**: You MUST output a valid JSON object where keys are filenames (e.g., "index.html", "game.js") and values are the complete string content for each file. Do NOT output anything else.
-        2.  **Game Scope**: The game MUST be a single, simple demo level. It MUST have a brief start screen (e.g., with a "Start" button) and win/lose screens.
-        3.  **Playability**: The game MUST be playable on both desktop (keyboard) and mobile (touchscreen).
-        4.  **File Linking**: `index.html` MUST correctly link to other files (e.g., `<link rel="stylesheet" href="style.css">`, `<script src="game.js" type="module"></script>`).
-        5.  **Responsiveness**: Player movement should feel responsive. Use `player.flipX` to track direction.
+**CRITICAL REQUIREMENTS:**
+1.  **Output Format**: Your entire response MUST be a single, valid JSON object. The keys must be filenames (e.g., "index.html", "style.css", "game.js"), and the values must be the complete string content for each file. Do NOT output markdown, comments, or any text outside of the JSON object.
+2.  **File Structure**: You MUST generate at least three files:
+    - `index.html`: The main HTML file.
+    - `style.css`: For all CSS styles.
+    - `game.js`: For all JavaScript game logic using Kaboom.js.
+3.  **File Linking**: `index.html` MUST correctly link to the other files.
+    - The CSS link must be: `<link rel="stylesheet" href="style.css">`.
+    - The JS link must be: `<script src="game.js" type="module"></script>`. Place this in the `<body>`.
+4.  **Game Scope**: The game MUST be a simple, single demo level. It MUST have a start screen (e.g., with a "Start" button), a win condition/screen, and a lose condition/screen.
+5.  **Playability**: The game MUST be playable on both desktop (keyboard controls) and mobile (touchscreen controls).
 
-        **AVAILABLE TOOLS (use public CDNs):**
-        - **Game Logic**: Kaboom.js (`https://unpkg.com/kaboom@3000.0.1/dist/kaboom.js`)
-        - **Audio**: Howler.js (`https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.4/howler.min.js`)
-        - **Animation**: GSAP (`https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js`)
+**GAME LIBRARY: KABOOM.JS (use `https://unpkg.com/kaboom@3000.0.1/dist/kaboom.js`)**
+-   **Initialization**: Initialize Kaboom in `game.js`. Let it create its own canvas: `kaboom()`. Do NOT specify a canvas in the options.
+-   **Scenes**: Structure your game with scenes (e.g., "start", "game", "win", "lose").
+-   **Assets**: Load assets (if any) at the beginning. You can use `loadSprite()` and `loadSound()`.
+-   **Movement**: Use `.move()` for continuous movement and `.jump()` for jumps. For player direction, use `player.flipX = true` for left and `player.flipX = false` for right.
 
-        **KABOOM.JS BEST PRACTICES:**
-        - **Initialization**: Let Kaboom create its own canvas. `kaboom({{...}})`
-        - **Physics**: Use `.move()` for continuous movement, `.jump()` for jumps. For dashes, manipulate `.velocity` and temporarily set `gravityScale = 0`.
-        - **Direction**: Set `player.flipX = true` (left) and `player.flipX = false` (right).
+{context_block}
+{instruction_block}
 
-        **GSAP BEST PRACTICES:**
-        - **Targeting**: Animate the Kaboom game object directly, not its internal properties. `gsap.to(myGameObject, {{...}})`
-
-        {context_block}
-        {instruction_block}
-
-        Ensure your entire output is ONLY the raw JSON object, starting with `{{` and ending with `}}`.
-        """
+Now, generate the complete and updated file structure as a single JSON object. Start with `{{` and end with `}}`.
+"""
         prompt = f"""
         INITIAL VIBE: "{vibe}"
         AGENT CONVERSATION HISTORY:
         {conversation}
 
-        Generate the complete and updated file structure as a JSON object now. If you are modifying code, return the complete content for ALL necessary files, not just the changed ones.
+        Generate the JSON object now.
         """
         try:
             model_name = self.config.get("llm", "gemini-2.5-flash")
@@ -218,7 +216,27 @@ class CoderAgent(Agent):
             return json.loads(text_response)
         except (json.JSONDecodeError, AttributeError, Exception) as e:
             print(f"Error processing model response as JSON: {e}")
-            return f"<html><body>Failed to generate structured game files. Error: {e}</body></html>"
+            # Return the raw text for debugging if JSON parsing fails
+            raw_response_text = "Could not parse JSON response from model."
+            try:
+                raw_response_text = response.text
+            except NameError:
+                pass # response object might not exist
+            
+            error_html = f"""
+            <html>
+                <head><title>Generation Error</title></head>
+                <body style="font-family: monospace; background-color: #111; color: #f00;">
+                    <h1>Agent Coder Error</h1>
+                    <p>Failed to generate structured game files. The model did not return valid JSON.</p>
+                    <h2>Error Details:</h2>
+                    <pre>{e}</pre>
+                    <h2>Raw Model Response:</h2>
+                    <pre>{raw_response_text}</pre>
+                </body>
+            </html>
+            """
+            return {"error.html": error_html}
 
 class DesignerAgent(Agent):
     async def run(self, prompt: str, instructions: str | None = None):
@@ -270,3 +288,6 @@ class WriterAgent(Agent):
         full_prompt = f"{prompt}. {instruction_text} You can suggest story elements that imply game mechanics or sound cues (e.g., '[A laser fires with a sharp *pew* sound]'), knowing the Coder can use powerful game and audio libraries to implement them."
         response = await self.generate_response(full_prompt)
         self.speak(response)
+]]>
+    </content>
+  
