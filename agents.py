@@ -183,6 +183,7 @@ The user's 'vibe' may be vague. Use your creative judgment to fill in the gaps. 
     - `style.css`: For all CSS styles.
     - `game.js`: For all JavaScript game logic using Kaboom.js.
 3.  **File Linking**: `index.html` MUST correctly link to the other files.
+    - It MUST include the Kaboom.js library from the CDN: `<script src="https://unpkg.com/kaboom@3000.0.1/dist/kaboom.js"></script>` in the `<head>`.
     - The CSS link must be: `<link rel="stylesheet" href="style.css">`.
     - The JS link must be: `<script src="game.js" type="module"></script>`. Place this in the `<body>`.
 4.  **Game Scope**: The game MUST be a simple, single demo level. It MUST have a start screen (e.g., with a "Start" button), a win condition/screen, and a lose condition/screen.
@@ -288,6 +289,3 @@ class WriterAgent(Agent):
         full_prompt = f"{prompt}. {instruction_text} You can suggest story elements that imply game mechanics or sound cues (e.g., '[A laser fires with a sharp *pew* sound]'), knowing the Coder can use powerful game and audio libraries to implement them."
         response = await self.generate_response(full_prompt)
         self.speak(response)
-]]>
-    </content>
-  

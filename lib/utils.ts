@@ -2,7 +2,7 @@
 import React from 'react';
 import { Node } from 'reactflow';
 import { NodeData, SerializedNodeData } from '../types.ts';
-import { AGENT_TEMPLATES, TriggerIcon, ToolIcon } from '../constants.tsx';
+import { AGENT_TEMPLATES, TriggerIcon, ToolIcon, CheckeredFlagIcon } from '../constants.tsx';
 
 /**
  * Reconstructs node data with React component icons after being loaded from serialization.
@@ -25,7 +25,11 @@ export const reconstructNodeIcons = (nodes: Node<SerializedNodeData>[]): Node<No
         icon = React.createElement(TriggerIcon, { className: "w-8 h-8 text-amber-400" });
         break;
       case 'toolNode':
-        icon = React.createElement(ToolIcon, { className: "w-6 h-6" });
+        if (node.data.label === 'Code Generator') {
+          icon = React.createElement(CheckeredFlagIcon, { className: "w-6 h-6" });
+        } else {
+          icon = React.createElement(ToolIcon, { className: "w-6 h-6" });
+        }
         break;
       default:
         icon = React.createElement('div', null); // Fallback for unknown node types

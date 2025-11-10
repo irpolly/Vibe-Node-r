@@ -1,4 +1,3 @@
-
 # Vibe Node(r) 🚀
 
 **Vibe Node(r)** is a dynamic, AI-driven workflow builder that transforms your vague ideas—or "vibes"—into functional, interactive web applications. Using a powerful multi-agent system powered by Google's Gemini API, you can visually design, constrain, and execute complex agentic workflows on a customizable canvas, bringing your concepts to life in minutes.
@@ -42,6 +41,7 @@ Follow these steps to run Vibe Node(r) on your local machine.
 -   Python 3.9+
 -   Node.js 20+ & npm
 -   `pip` for Python package installation
+-   Google Cloud SDK (`gcloud` CLI)
 
 ### 2. Clone the Repository
 
@@ -79,54 +79,48 @@ Install the necessary Node.js dependencies.
 npm install
 ```
 
-### 5. Configure Your Gemini API Key
+### 5. Authenticate to Google Cloud
 
-The application requires a Gemini API key to function. Set it as an environment variable named `API_KEY`.
+The application uses **Application Default Credentials (ADC)** to authenticate to the Vertex AI API. It does **not** use an `API_KEY` environment variable.
 
-**On macOS/Linux**:
-
-```bash
-export API_KEY="YOUR_API_KEY_HERE"
-```
-
-**On Windows (Command Prompt)**:
+For local development, authenticate the `gcloud` CLI. This will open a browser window to log in with your Google account. The account must have the **"Vertex AI User"** role in your target GCP project.
 
 ```bash
-set API_KEY="YOUR_API_KEY_HERE"
+gcloud auth application-default login
 ```
 
-**On Windows (PowerShell)**:
+You also need to set your project ID for the SDK to find it.
 
-```powershell
-$env:API_KEY="YOUR_API_KEY_HERE"
+```bash
+gcloud config set project YOUR_PROJECT_ID_HERE
 ```
 
 ### 6. Run the Application
 
-You need to run the backend and frontend servers in two separate terminal windows.
+The backend is a Flask server that also serves the built frontend files. You must build the frontend first.
 
-**Terminal 1: Start the Backend (Flask)**
+**Terminal 1: Build the Frontend**
+
+This command compiles the React/TypeScript app into static HTML, CSS, and JS files in a `build` directory.
 
 ```bash
-# Make sure your Python virtual environment is activated
+npm run build
+```
+
+**Terminal 2: Start the Backend**
+
+Make sure your Python virtual environment is still activated. This command runs the Flask server, which will automatically serve the files from the `build` directory.
+
+```bash
 flask --app main run
 ```
 
-The backend will start on `http://127.0.0.1:5000`.
+The backend will start on `http://127.0.0.1:5000`. **Open this URL in your browser** to use the application.
 
-**Terminal 2: Start the Frontend (Vite)**
-
-```bash
-npm run dev
-```
-
-The frontend development server will start, typically on `http://127.0.0.1:5173`. Open this URL in your web browser to use the application.
+(Note: `npm run dev` is only for advanced frontend development and will not connect to the Python backend without further configuration.)
 
 ## ☁️ Deployment
 
 This application is pre-configured for easy deployment to serverless platforms like **Google Cloud Run**.
 
-The included `Dockerfile` creates a production-ready container that builds the frontend, installs the backend dependencies, and runs the application with a Gunicorn server. The `API_KEY` can be securely injected as an environment variable from a secret manager.
-]]>
-    </content>
-  
+The included `Dockerfile` creates a production-ready container that builds the frontend, installs the backend dependencies, and runs the application with a Gunicorn server. When deploying to Cloud Run, ensure the service's runtime service account has the **"Vertex AI User"** IAM role.
