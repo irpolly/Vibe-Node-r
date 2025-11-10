@@ -10,6 +10,8 @@ import threading
 app = Flask(__name__, static_folder='build', static_url_path='')
 CORS(app) # Enable Cross-Origin Resource Sharing for local dev
 app.config['ARTIFACT_FOLDER'] = os.path.join(os.getcwd(), 'artifacts')
+app.config['LIBS_FOLDER'] = os.path.join(os.getcwd(), 'libs')
+
 
 # In-memory storage for active sessions. In a production environment,
 # this would be replaced with a database like Redis or Firestore.
@@ -94,6 +96,14 @@ def serve_artifact(session_id, filename):
     print(f"Serving artifact: {filename} from {directory}")
     return send_from_directory(directory, filename)
 
+@app.route('/api/libs/<path:filename>')
+def serve_lib(filename):
+    """Serves a JS library from the libs folder."""
+    directory = app.config['LIBS_FOLDER']
+    print(f"Serving library: {filename} from {directory}")
+    return send_from_directory(directory, filename)
+
+
 # --- Frontend Serving ---
 # Serve React App
 @app.route('/', defaults={'path': ''})
@@ -107,4 +117,6 @@ def serve(path):
 if __name__ == '__main__':
     if not os.path.exists(app.config['ARTIFACT_FOLDER']):
         os.makedirs(app.config['ARTIFACT_FOLDER'])
+    if not os.path.exists(app.config['LIBS_FOLDER']):
+        os.makedirs(app.config['LIBS_FOLDER'])
     app.run(debug=True, port=5000)

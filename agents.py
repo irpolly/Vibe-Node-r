@@ -90,10 +90,10 @@ class ManagerAgent(Agent):
 class CoderAgent(Agent):
     async def run_initial_development(self, prompt: str, instructions: str | None = None):
         """Phase 1 of coding: planning and initial implementation."""
-        self.speak(await self.generate_response(f"Explain your plan to start coding a game based on the prompt: '{prompt}'"))
+        self.speak(await self.generate_response(f"Explain your plan to start coding a game based on the prompt: '{prompt}'. I will consider using a JS game library like Kaboom.js or Phaser for a better result."))
         await self.think(2)
         
-        self.speak(await self.generate_response("Provide a brief update on building a basic physics engine and state that the initial version is ready for testing."))
+        self.speak(await self.generate_response("Provide a brief update on building the basic game structure and state that the initial version is ready for testing."))
         await self.think(2)
 
     async def run_finalization(self, vibe: str, instructions: str | None = None):
@@ -124,10 +124,20 @@ class CoderAgent(Agent):
         )
 
         system_instruction = f"""
-        Based on the following development team conversation, the initial "vibe", and user instructions, act as an expert frontend developer.
+        Based on the following development team conversation, the initial "vibe", and user instructions, act as an expert frontend game developer.
         Your task is to generate a complete, single-file HTML document that implements the described game.
-        The HTML file must include all necessary CSS and JavaScript within it. Do not use any external libraries.
-        The game should be simple, playable, and adhere to the user's instructions.
+
+        **CRITICAL REQUIREMENTS:**
+        1. The game MUST be playable on both desktop (keyboard/mouse) and mobile (touchscreen) devices. Implement controls for both.
+        2. The HTML file must include all necessary CSS and JavaScript within it.
+        3. The game should be simple, playable, and adhere to the user's instructions.
+
+        **AVAILABLE TOOLS:**
+        To create more engaging and complex games, you are encouraged to use a JavaScript game library. These libraries are hosted locally by the application.
+        - **Kaboom.js**: For fun, simple games. To use it, include this tag in your HTML: `<script src="/api/libs/kaboom.js"></script>`
+        - **Phaser**: For more complex 2D games. To use it, include this tag in your HTML: `<script src="/api/libs/phaser.min.js"></script>`
+
+        When you choose a library, you MUST include the corresponding `<script>` tag in the `<head>` of the generated HTML. Do not use any other external libraries or CDNs.
 
         {instruction_block}
 
@@ -162,7 +172,7 @@ class DesignerAgent(Agent):
         
         await self.think(2)
         
-        assets_prompt = f"Following up on your plan for the prompt '{prompt}' and instructions '{instructions}', describe the specific visual assets (like sprites, color palettes, UI elements) you have conceptually created. Announce that you are sending them to the Coder. Be creative and descriptive."
+        assets_prompt = f"Following up on your plan for the prompt '{prompt}' and instructions '{instructions}', describe the specific visual assets you have conceptually created. Feel free to suggest concepts that might leverage a game library like Kaboom.js or Phaser for effects or animations. Announce that you are sending them to the Coder. Be creative and descriptive."
         assets_response = await self.generate_response(assets_prompt)
         self.speak(assets_response)
 
@@ -174,6 +184,6 @@ class TesterAgent(Agent):
 class WriterAgent(Agent):
     async def run(self, prompt: str, instructions: str | None = None):
         instruction_text = f"Take these user instructions into account: {instructions}" if instructions else ""
-        full_prompt = f"{prompt}. {instruction_text}"
+        full_prompt = f"{prompt}. {instruction_text} You can suggest story elements that imply game mechanics, knowing the Coder can use game libraries to implement them."
         response = await self.generate_response(full_prompt)
         self.speak(response)

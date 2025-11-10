@@ -41,6 +41,7 @@ interface BuilderPageProps {
 const getLayoutedNodes = (nodesToLayout: Node<NodeData>[], edgesToLayout: Edge[]): Node<NodeData>[] => {
     if (nodesToLayout.length === 0) return [];
 
+    // 1. Build graph representation for ALL nodes to correctly find dependencies
     const adj: { [key: string]: string[] } = {};
     const inDegree: { [key: string]: number } = {};
 
@@ -58,8 +59,10 @@ const getLayoutedNodes = (nodesToLayout: Node<NodeData>[], edgesToLayout: Edge[]
         }
     });
 
+    // 2. Find the starting queue for the layout. These are nodes with no incoming edges.
     const queue: string[] = nodesToLayout.filter(node => inDegree[node.id] === 0).map(n => n.id);
     
+    // 3. Perform topological sort to find layers
     const layers: { [level: number]: string[] } = {};
     let level = 0;
 
@@ -80,11 +83,15 @@ const getLayoutedNodes = (nodesToLayout: Node<NodeData>[], edgesToLayout: Edge[]
         level++;
     }
 
+    // 4. Position the nodes based on layers
     const COLUMN_WIDTH = 280;
     const ROW_HEIGHT = 180;
 
-    const newNodes = [...nodesToLayout];
-    const nodeMap = new Map(newNodes.map(n => [n.id, n]));
+    // FIX: Create a new array of node objects to avoid direct state mutation.
+    // Using JSON.stringify/parse breaks the React components used for icons.
+    // This mapping preserves the icon components.
+    const newNodes = nodesToLayout.map(n => ({ ...n }));
+    const nodeMap = new Map(newNodes.map((n: Node) => [n.id, n]));
 
     Object.keys(layers).forEach(levelStr => {
         const currentLevel = parseInt(levelStr, 10);
@@ -96,13 +103,25 @@ const getLayoutedNodes = (nodesToLayout: Node<NodeData>[], edgesToLayout: Edge[]
         nodesInLevel.forEach((nodeId, i) => {
             const node = nodeMap.get(nodeId);
             if (node) {
-                node.position = {
-                    x: currentLevel * COLUMN_WIDTH,
-                    y: startY + i * ROW_HEIGHT,
-                };
+                // Override for fixed nodes
+                if (node.id === '1') {
+                    node.position = { x: -150, y: 0 };
+                } else if (node.id === '2') {
+                    node.position = { x: 150, y: 0 };
+                } else {
+                    // Position dynamic nodes based on their layer
+                    // We subtract 1 from the level because level 0 is the trigger, level 1 is the manager.
+                    // The first dynamic layer is level 2.
+                    const xPos = 150 + (currentLevel - 1) * COLUMN_WIDTH;
+                    node.position = {
+                        x: xPos,
+                        y: startY + i * ROW_HEIGHT,
+                    };
+                }
             }
         });
     });
+    
     return newNodes;
 }
 
@@ -120,16 +139,16 @@ const BuilderPageContent: React.FC<BuilderPageProps> = ({ onFinalizeSuccess }) =
   const [isDeletingMode, setIsDeletingMode] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+  const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
-  };
+  }, []);
 
   const handleAutoAlign = useCallback(() => {
     const layoutedNodes = getLayoutedNodes(nodes, edges);
     setNodes(layoutedNodes);
     showToast("Workflow aligned!", "success");
-  }, [nodes, edges, setNodes]);
+  }, [nodes, edges, setNodes, showToast]);
 
   const handleResetLayout = useCallback(() => {
     const reconstructedInitialNodes = reconstructNodeIcons(INITIAL_NODES);
@@ -137,7 +156,7 @@ const BuilderPageContent: React.FC<BuilderPageProps> = ({ onFinalizeSuccess }) =
     setNodes(layoutedNodes);
     setEdges(INITIAL_EDGES);
     showToast("Layout reset to default.", "success");
-  }, [setNodes, setEdges]);
+  }, [setNodes, setEdges, showToast]);
 
   // Auto-load session on mount
   useEffect(() => {
@@ -257,19 +276,27 @@ const BuilderPageContent: React.FC<BuilderPageProps> = ({ onFinalizeSuccess }) =
   const onEdgeClick = useCallback(
     (_: React.MouseEvent, edge: Edge) => {
       if (isDeletingMode) {
+        if (edge.deletable === false) {
+          showToast("This connection cannot be deleted.", "error");
+          return;
+        }
         setEdges((eds) => eds.filter((e) => e.id !== edge.id));
       }
     },
-    [isDeletingMode, setEdges]
+    [isDeletingMode, setEdges, showToast]
   );
 
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
       if (isDeletingMode) {
+        if (node.deletable === false) {
+          showToast("This node cannot be deleted.", "error");
+          return;
+        }
         setNodes((nds) => nds.filter((n) => n.id !== node.id));
       }
     },
-    [isDeletingMode, setNodes]
+    [isDeletingMode, setNodes, showToast]
   );
 
   const handleToggleDeleteMode = () => {

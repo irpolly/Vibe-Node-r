@@ -118,8 +118,8 @@ export const AGENT_TEMPLATES: Record<string, { icon: React.ReactNode, color: str
 };
 
 export const INITIAL_NODES: Node<NodeData>[] = [
-  { id: '1', type: 'triggerNode', position: { x: 0, y: 0 }, data: { label: 'Vibe Input', type: 'trigger', icon: <TriggerIcon className="w-8 h-8 text-amber-400" /> } },
-  { id: '2', type: 'agentNode', position: { x: 0, y: 0 }, data: { type: 'agent', ...AGENT_TEMPLATES.manager, label: 'Manager Agent', templateKey: 'manager' } },
+  { id: '1', type: 'triggerNode', position: { x: 0, y: 0 }, data: { label: 'Vibe Input', type: 'trigger', icon: <TriggerIcon className="w-8 h-8 text-amber-400" /> }, deletable: false, draggable: false },
+  { id: '2', type: 'agentNode', position: { x: 0, y: 0 }, data: { type: 'agent', ...AGENT_TEMPLATES.manager, label: 'Manager Agent', templateKey: 'manager' }, deletable: false, draggable: false },
   { id: '3', type: 'agentNode', position: { x: 0, y: 0 }, data: { type: 'agent', ...AGENT_TEMPLATES.writer, label: 'Writer Agent', templateKey: 'writer' } },
   { id: '4', type: 'agentNode', position: { x: 0, y: 0 }, data: { type: 'agent', ...AGENT_TEMPLATES.designer, label: 'Designer Agent', templateKey: 'designer' } },
   { id: '5', type: 'agentNode', position: { x: 0, y: 0 }, data: { type: 'agent', ...AGENT_TEMPLATES.coder, label: 'Coder Agent', templateKey: 'coder' } },
@@ -129,7 +129,7 @@ export const INITIAL_NODES: Node<NodeData>[] = [
 ];
 
 export const INITIAL_EDGES: Edge[] = [
-  { id: 'e1-2', source: '1', target: '2', animated: true },
+  { id: 'e1-2', source: '1', target: '2', animated: true, deletable: false },
   { id: 'e2-3', source: '2', target: '3' },
   { id: 'e2-4', source: '2', target: '4' },
   { id: 'e2-5', source: '2', target: '5' },
