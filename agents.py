@@ -8,9 +8,6 @@ from vertexai.generative_models import GenerativeModel
 if TYPE_CHECKING:
     from session import Session
 
-# --- Model Configuration ---
-MODEL_NAME = "gemini-2.5-flash"
-
 # --- Base Agent Class ---
 class Agent:
     """Base class for all agents in the system."""
@@ -34,9 +31,9 @@ class Agent:
     async def generate_response(self, prompt: str) -> str:
         """Generates a response using the Vertex AI Gemini API."""
         try:
-            # Instantiating the model from the Vertex AI SDK
+            model_name = self.config.get("llm", "gemini-pro")
             system_instruction = f"You are an AI agent acting as a {self.role} in a team. Your personality should be professional but concise. Based on the following prompt, provide your response or update in 1-2 sentences."
-            model = GenerativeModel(MODEL_NAME, system_instruction=system_instruction)
+            model = GenerativeModel(model_name, system_instruction=system_instruction)
             response = await model.generate_content_async(prompt)
             return response.text.strip()
         except Exception as e:
@@ -91,7 +88,7 @@ class ManagerAgent(Agent):
 class CoderAgent(Agent):
     async def run_initial_development(self, prompt: str, instructions: str | None = None):
         """Phase 1 of coding: planning and initial implementation."""
-        self.speak(await self.generate_response(f"Explain your plan to start coding a game based on the prompt: '{prompt}'. I will consider using a JS game library like Kaboom.js or Phaser for a better result and will structure the code into separate HTML, CSS, and JS files."))
+        self.speak(await self.generate_response(f"Explain your plan to start coding a game based on the prompt: '{prompt}'. I will use a JS game library and structure the code into separate HTML, CSS, and JS files. I'll use Howler.js for audio and GSAP for animations."))
         await self.think(2)
         
         self.speak(await self.generate_response("Provide a brief update on building the basic game structure and state that the initial version is ready for testing."))
@@ -142,9 +139,14 @@ class CoderAgent(Agent):
         3.  The game should be simple, playable, and adhere to the user's instructions.
 
         **AVAILABLE TOOLS:**
-        You are encouraged to use a JavaScript game library. These are hosted locally.
-        - **Kaboom.js**: For fun, simple games. Include with `<script src="/api/libs/kaboom.js"></script>`.
-        - **Phaser**: For more complex 2D games. Include with `<script src="/api/libs/phaser.min.js"></script>`.
+        You are encouraged to use these JavaScript libraries via their public CDNs for better results.
+        - **Game Logic**:
+          - **Kaboom.js**: For fun, simple games. Include with `<script src="https://unpkg.com/kaboom@3000.0.1/dist/kaboom.js"></script>`.
+          - **Phaser**: For more complex 2D games. Include with `<script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>`.
+        - **Audio**:
+          - **Howler.js**: **Use this for all sound effects and music.** It is much more reliable than native browser audio. Include with `<script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.4/howler.min.js"></script>`.
+        - **Animation**:
+          - **GSAP**: For high-performance animations and tweens (e.g., UI, transitions, complex movements). Include with `<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>`.
 
         **KABOOM.JS BEST PRACTICE:**
         When using Kaboom.js, do NOT provide a `canvas` property during initialization. Let Kaboom create and manage its own canvas.
@@ -164,7 +166,8 @@ class CoderAgent(Agent):
         Generate the file structure as a JSON object now.
         """
         try:
-            model = GenerativeModel(MODEL_NAME, system_instruction=system_instruction)
+            model_name = self.config.get("llm", "gemini-pro")
+            model = GenerativeModel(model_name, system_instruction=system_instruction)
             # Request JSON output from the model
             response = await model.generate_content_async(prompt, generation_config={"response_mime_type": "application/json"})
             
@@ -191,7 +194,7 @@ class DesignerAgent(Agent):
         
         await self.think(2)
         
-        assets_prompt = f"Following up on your plan for the prompt '{prompt}' and instructions '{instructions}', describe the specific visual assets you have conceptually created. Feel free to suggest concepts that might leverage a game library like Kaboom.js or Phaser for effects or animations. Announce that you are sending them to the Coder. Be creative and descriptive."
+        assets_prompt = f"Following up on your plan for the prompt '{prompt}' and instructions '{instructions}', describe the specific visual assets you have conceptually created. Feel free to suggest concepts that might leverage a game library like Kaboom.js or Phaser for effects or animations, and GSAP for UI animations. Also, suggest sound effects, knowing the Coder can use Howler.js. Announce that you are sending them to the Coder. Be creative and descriptive."
         assets_response = await self.generate_response(assets_prompt)
         self.speak(assets_response)
 
@@ -203,6 +206,6 @@ class TesterAgent(Agent):
 class WriterAgent(Agent):
     async def run(self, prompt: str, instructions: str | None = None):
         instruction_text = f"Take these user instructions into account: {instructions}" if instructions else ""
-        full_prompt = f"{prompt}. {instruction_text} You can suggest story elements that imply game mechanics, knowing the Coder can use game libraries and separate JS files to implement them."
+        full_prompt = f"{prompt}. {instruction_text} You can suggest story elements that imply game mechanics or sound cues (e.g., '[A laser fires with a sharp *pew* sound]'), knowing the Coder can use powerful game and audio libraries to implement them."
         response = await self.generate_response(full_prompt)
         self.speak(response)

@@ -35,6 +35,32 @@ const agentColors: Record<string, string> = {
     'System': 'text-gray-400',
 };
 
+// AdSense Component
+const AdSenseAd: React.FC<{ slot: string; format?: string; responsive?: string }> = ({ slot, format = 'auto', responsive = 'true' }) => {
+  useEffect(() => {
+    try {
+      // @ts-ignore
+      (window.adsbygoogle = window.adsbygoogle || []).push({});
+    } catch (e) {
+      console.error("AdSense error:", e);
+    }
+  }, []);
+
+  return (
+    <div className="my-4 text-center bg-gray-800 rounded-lg p-2">
+      <ins
+        className="adsbygoogle"
+        style={{ display: 'block' }}
+        data-ad-client="ca-pub-XXXXXXXXXXXXXXXX" // IMPORTANT: Replace with your own publisher ID from index.html
+        data-ad-slot={slot}
+        data-ad-format={format}
+        data-full-width-responsive={responsive}
+      ></ins>
+    </div>
+  );
+};
+
+
 const OutputPage: React.FC<OutputPageProps> = ({ onBack, workflowId }) => {
   const [vibe, setVibe] = useState('');
   const [instructions, setInstructions] = useState('');
@@ -212,6 +238,10 @@ const OutputPage: React.FC<OutputPageProps> = ({ onBack, workflowId }) => {
                 placeholder="e.g., 'Use a dark, minimalist theme with blue accents. The main character should be a glowing orb. Avoid pixel art.'"
             />
           </div>
+          
+          {/* AdSense Ad Unit - IMPORTANT: Replace with your ad slot ID */}
+          <AdSenseAd slot="YOUR_AD_SLOT_ID" /> 
+
           <div className="flex-1 bg-gray-800 rounded-lg overflow-hidden border border-gray-700 relative flex flex-col min-h-[300px]">
             <div className="flex-shrink-0 bg-gray-900/50 p-2 text-sm text-gray-300 border-b border-gray-700">Agent Output</div>
             <div className="h-full w-full overflow-auto p-4 space-y-4">

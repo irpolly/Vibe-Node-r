@@ -33,9 +33,6 @@ COPY main.py .
 COPY session.py .
 COPY agents.py .
 
-# Copy the local JS libraries
-COPY libs ./libs
-
 # Copy the built frontend static files from the 'builder' stage's /app/build directory
 # into a 'build' directory in the final container. The Python app is configured to serve from 'build'.
 COPY --from=builder /app/build ./build
