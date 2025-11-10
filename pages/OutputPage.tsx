@@ -3,7 +3,7 @@ import Button from '../components/ui/Button.tsx';
 import Spinner from '../components/ui/Spinner.tsx';
 import Toast from '../components/ui/Toast.tsx';
 import Emulator from '../components/ui/Emulator.tsx';
-import { GitHubIcon, DownloadIcon, BackIcon, ManagerIcon, CodeIcon, DesignIcon, TestIcon, WriterIcon, ChatLogIcon, RotateIcon, ZipIcon, SendIcon } from '../constants.tsx';
+import { GitHubIcon, DownloadIcon, BackIcon, ManagerIcon, CodeIcon, DesignIcon, TestIcon, WriterIcon, ChatLogIcon, RotateIcon, ZipIcon, SendIcon, ResetIcon } from '../constants.tsx';
 import { ChatMessage } from '../types.ts';
 import { runWorkflow, getSessionStatus, instructAgent } from '../services/adkApi.ts';
 import { GAME_IDEAS } from '../lib/gameIdeas.ts';
@@ -215,6 +215,24 @@ const OutputPage: React.FC<OutputPageProps> = ({ onBack, workflowId }) => {
     showToast('Chat log saved!', 'success');
   };
 
+  const handleRestartEmulator = () => {
+    if (iframeRef.current) {
+        if (previewUrl && iframeRef.current.src) {
+            // Force a full reload of the iframe content by re-setting its src
+            // A new timestamp acts as a cache-buster
+            const url = new URL(iframeRef.current.src);
+            url.searchParams.set('t', new Date().getTime().toString());
+            iframeRef.current.src = url.toString();
+            showToast("Emulator restarting...", "success");
+        } else {
+            // If no preview is loaded, just reset to the initial placeholder
+            iframeRef.current.src = 'about:blank';
+            iframeRef.current.srcdoc = initialCode;
+            showToast("Emulator reset to initial state.", "success");
+        }
+    }
+  };
+
   return (
     <div className="bg-gray-900 text-white w-screen h-screen flex flex-col">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
@@ -323,10 +341,16 @@ const OutputPage: React.FC<OutputPageProps> = ({ onBack, workflowId }) => {
         <div className="flex flex-col h-full overflow-y-auto">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-300">3. Live Preview</h2>
-            <Button onClick={() => setOrientation(o => o === 'portrait' ? 'landscape' : 'portrait')} variant="ghost">
-              <RotateIcon className="w-5 h-5" />
-              Rotate
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button onClick={() => setOrientation(o => o === 'portrait' ? 'landscape' : 'portrait')} variant="ghost">
+                <RotateIcon className="w-5 h-5" />
+                Rotate
+              </Button>
+              <Button onClick={handleRestartEmulator} variant="ghost" disabled={isLoading}>
+                <ResetIcon className="w-5 h-5" />
+                Restart
+              </Button>
+            </div>
           </div>
           <div className="flex-1 flex items-center justify-center w-full min-h-0">
             <Emulator
