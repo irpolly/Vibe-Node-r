@@ -1,9 +1,9 @@
+
 import os
 import time
 from agents import ManagerAgent, CoderAgent, DesignerAgent, TesterAgent, WriterAgent, Agent
 from typing import List, Dict, Any
 import asyncio
-import vertexai
 
 # --- Data Structures ---
 class Message:
@@ -122,7 +122,7 @@ class Session:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            vertexai.init()
+            # The Vertex AI SDK is now initialized once at application startup in main.py
             loop.run_until_complete(coro)
             self.status = "COMPLETED"
             self.add_message("System", "Task completed successfully.")

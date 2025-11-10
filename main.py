@@ -1,3 +1,4 @@
+
 import os
 import io
 import zipfile
@@ -6,11 +7,34 @@ from flask_cors import CORS
 from session import Session
 import uuid
 import threading
+import vertexai
 
 # --- App Initialization ---
 app = Flask(__name__, static_folder='build', static_url_path='')
 CORS(app) # Enable Cross-Origin Resource Sharing for local dev
 app.config['ARTIFACT_FOLDER'] = os.path.join(os.getcwd(), 'artifacts')
+
+# --- Vertex AI Initialization ---
+# In a Cloud Run environment, project and location can often be inferred.
+# We'll initialize it here once at startup for robustness.
+try:
+    # The project and location are usually available as environment variables in Cloud Run.
+    project_id = os.environ.get('GOOGLE_CLOUD_PROJECT')
+    location = os.environ.get('GOOGLE_CLOUD_REGION') # e.g., 'europe-west4'
+    
+    if not project_id or not location:
+        print("⚠️  GOOGLE_CLOUD_PROJECT or GOOGLE_CLOUD_REGION not set. vertexai.init() will try to infer them.")
+        # For local testing, you might need to set these manually or use `gcloud auth application-default login`
+        vertexai.init()
+        print("✅ Vertex AI initialized with inferred settings.")
+    else:
+        vertexai.init(project=project_id, location=location)
+        print(f"✅ Vertex AI initialized successfully for project: {project_id} in location: {location}")
+
+except Exception as e:
+    # This will print a clear error to the logs if initialization fails, which is critical for debugging "Service Unavailable" errors.
+    print(f"❌ FATAL: Failed to initialize Vertex AI: {e}")
+    # This is a non-recoverable error, so we log it prominently. The app will likely fail health checks.
 
 
 # In-memory storage for active sessions. In a production environment,
