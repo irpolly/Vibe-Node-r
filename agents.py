@@ -192,7 +192,10 @@ The user's 'vibe' may be vague. Use your creative judgment to fill in the gaps. 
 **GAME LIBRARY: KABOOM.JS (use `https://unpkg.com/kaboom@3000.0.1/dist/kaboom.js`)**
 -   **Initialization**: Initialize Kaboom in `game.js`. Let it create its own canvas: `kaboom()`. Do NOT specify a canvas in the options.
 -   **Scenes**: Structure your game with scenes (e.g., "start", "game", "win", "lose").
--   **Assets**: Load assets (if any) at the beginning. You can use `loadSprite()` and `loadSound()`.
+-   **Controls (CRITICAL for Playability)**:
+    -   **Desktop**: Use keyboard events like `onKeyPress("space", ...)` for jumping or actions, and `onKeyDown("left", ...)` for continuous movement.
+    -   **Mobile/Touch**: Use `onClick(() => {{ ... }})` or `onTouchStart(() => {{ ... }})` for actions. For movement, a good pattern is to check the touch position: `if (mousePos().x < width() / 2) {{ /* move left */ }} else {{ /* move right */ }}`.
+    -   **Combine Both**: Ensure actions can be triggered by EITHER keyboard OR touch. For example, a jump could be triggered by the spacebar OR a screen tap.
 -   **Movement**: Use `.move()` for continuous movement and `.jump()` for jumps. For player direction, use `player.flipX = true` for left and `player.flipX = false` for right.
 
 {context_block}
