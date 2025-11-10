@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Node, Edge } from 'reactflow';
-import { NodeData, AgentConfig } from '@/types';
+import { NodeData, AgentConfig } from './types.ts';
 
 export const CodeIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
