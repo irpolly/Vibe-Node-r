@@ -34,8 +34,8 @@ dist/
 .npm/
 
 # Other projects found in the build log
-is-it-ai-grok/
 Vibe-Node-r/
+is-it-ai-grok/
 
 # Secrets and local environment files
 .env
