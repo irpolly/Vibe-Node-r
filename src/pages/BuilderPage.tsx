@@ -42,8 +42,8 @@ const BuilderPageContent: React.FC<BuilderPageProps> = ({ onFinalizeSuccess }) =
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition, getViewport, setViewport } = useReactFlow();
   
-  const [nodes, setNodes, onNodesChange] = useNodesState<NodeData>(INITIAL_NODES);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(INITIAL_EDGES);
+  const [nodes, setNodes, onNodesChange] = useNodesState<NodeData>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   
   const [selectedNode, setSelectedNode] = useState<any>(null);
   const [isSubmissionModalOpen, setSubmissionModalOpen] = useState(false);
@@ -58,22 +58,29 @@ const BuilderPageContent: React.FC<BuilderPageProps> = ({ onFinalizeSuccess }) =
   };
 
   const handleAutoAlign = useCallback(() => {
-    if (nodes.length === 0) return;
+    const localNodes = INITIAL_NODES;
+    const localEdges = INITIAL_EDGES;
+
+    if (localNodes.length === 0) return;
 
     const adj: { [key: string]: string[] } = {};
     const inDegree: { [key: string]: number } = {};
 
-    nodes.forEach(node => {
+    localNodes.forEach(node => {
         adj[node.id] = [];
         inDegree[node.id] = 0;
     });
 
-    edges.forEach(edge => {
-        adj[edge.source].push(edge.target);
-        inDegree[edge.target]++;
+    localEdges.forEach(edge => {
+        if (adj[edge.source]) {
+            adj[edge.source].push(edge.target);
+        }
+        if (inDegree[edge.target] !== undefined) {
+            inDegree[edge.target]++;
+        }
     });
 
-    const queue: string[] = nodes.filter(node => inDegree[node.id] === 0).map(n => n.id);
+    const queue: string[] = localNodes.filter(node => inDegree[node.id] === 0).map(n => n.id);
     
     const layers: { [level: number]: string[] } = {};
     let level = 0;
@@ -98,7 +105,7 @@ const BuilderPageContent: React.FC<BuilderPageProps> = ({ onFinalizeSuccess }) =
     const COLUMN_WIDTH = 280;
     const ROW_HEIGHT = 180;
 
-    const newNodes = [...nodes];
+    const newNodes = [...localNodes];
     const nodeMap = new Map(newNodes.map(n => [n.id, n]));
 
     Object.keys(layers).forEach(levelStr => {
@@ -119,9 +126,10 @@ const BuilderPageContent: React.FC<BuilderPageProps> = ({ onFinalizeSuccess }) =
         });
     });
 
-    setNodes([...newNodes]);
+    setNodes(newNodes);
+    setEdges(localEdges);
     showToast("Workflow aligned!", "success");
-  }, [nodes, edges, setNodes]);
+  }, [setNodes, setEdges]);
 
   // Auto-load session on mount
   useEffect(() => {

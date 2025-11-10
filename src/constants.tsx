@@ -113,11 +113,11 @@ export const AGENT_TEMPLATES: Record<string, { icon: React.ReactNode, color: str
 
 export const INITIAL_NODES: Node<NodeData>[] = [
   { id: '1', type: 'triggerNode', position: { x: 0, y: 0 }, data: { label: 'Vibe Input', type: 'trigger', icon: <TriggerIcon className="w-8 h-8 text-amber-400" /> } },
-  { id: '2', type: 'agentNode', position: { x: 0, y: 0 }, data: { ...AGENT_TEMPLATES.manager, type: 'agent', label: 'Manager Agent', templateKey: 'manager' } },
-  { id: '3', type: 'agentNode', position: { x: 0, y: 0 }, data: { ...AGENT_TEMPLATES.writer, type: 'agent', label: 'Writer Agent', templateKey: 'writer' } },
-  { id: '4', type: 'agentNode', position: { x: 0, y: 0 }, data: { ...AGENT_TEMPLATES.designer, type: 'agent', label: 'Designer Agent', templateKey: 'designer' } },
-  { id: '5', type: 'agentNode', position: { x: 0, y: 0 }, data: { ...AGENT_TEMPLATES.coder, type: 'agent', label: 'Coder Agent', templateKey: 'coder' } },
-  { id: '6', type: 'agentNode', position: { x: 0, y: 0 }, data: { ...AGENT_TEMPLATES.tester, type: 'agent', label: 'Tester Agent', templateKey: 'tester' } },
+  { id: '2', type: 'agentNode', position: { x: 0, y: 0 }, data: { type: 'agent', ...AGENT_TEMPLATES.manager, label: 'Manager Agent', templateKey: 'manager' } },
+  { id: '3', type: 'agentNode', position: { x: 0, y: 0 }, data: { type: 'agent', ...AGENT_TEMPLATES.writer, label: 'Writer Agent', templateKey: 'writer' } },
+  { id: '4', type: 'agentNode', position: { x: 0, y: 0 }, data: { type: 'agent', ...AGENT_TEMPLATES.designer, label: 'Designer Agent', templateKey: 'designer' } },
+  { id: '5', type: 'agentNode', position: { x: 0, y: 0 }, data: { type: 'agent', ...AGENT_TEMPLATES.coder, label: 'Coder Agent', templateKey: 'coder' } },
+  { id: '6', type: 'agentNode', position: { x: 0, y: 0 }, data: { type: 'agent', ...AGENT_TEMPLATES.tester, label: 'Tester Agent', templateKey: 'tester' } },
   { id: '7', type: 'toolNode', position: { x: 0, y: 0 }, data: { label: 'Audio Synthesis', type: 'tool', icon: <ToolIcon className="w-6 h-6" /> } },
   { id: '8', type: 'toolNode', position: { x: 0, y: 0 }, data: { label: 'Code Generator', type: 'tool', icon: <ToolIcon className="w-6 h-6" /> } },
 ];
