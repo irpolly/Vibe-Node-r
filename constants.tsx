@@ -99,6 +99,15 @@ export const ZipIcon = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+export const CheckeredFlagIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M4 21V3h16l-4 5 4 5H4" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 3v10" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15 3v10" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M4 8h16" />
+  </svg>
+);
+
 export const SendIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
@@ -142,7 +151,7 @@ export const INITIAL_NODES: Node<NodeData>[] = [
   { id: '5', type: 'agentNode', position: { x: 250, y: 60 }, data: { type: 'agent', ...AGENT_TEMPLATES.coder, label: 'Coder Agent', templateKey: 'coder' } },
   { id: '6', type: 'agentNode', position: { x: 500, y: 60 }, data: { type: 'agent', ...AGENT_TEMPLATES.tester, label: 'Tester Agent', templateKey: 'tester' } },
   { id: '7', type: 'toolNode', position: { x: 500, y: -60 }, data: { label: 'Audio Synthesis', type: 'tool', icon: <ToolIcon className="w-6 h-6" /> } },
-  { id: '8', type: 'toolNode', position: { x: 250, y: 180 }, data: { label: 'Code Generator', type: 'tool', icon: <ToolIcon className="w-6 h-6" /> } },
+  { id: '8', type: 'toolNode', position: { x: 250, y: 180 }, data: { label: 'Code Generator', type: 'tool', icon: <CheckeredFlagIcon className="w-6 h-6" /> } },
 ];
 
 export const INITIAL_EDGES: Edge[] = [

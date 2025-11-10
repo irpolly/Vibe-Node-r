@@ -1,6 +1,5 @@
-
 import React from 'react';
-import { AGENT_TEMPLATES, ToolIcon } from '../../constants.tsx';
+import { AGENT_TEMPLATES, ToolIcon, CheckeredFlagIcon } from '../../constants.tsx';
 
 const Sidebar: React.FC = () => {
   const onDragStart = (event: React.DragEvent, type: string, data: any) => {
@@ -10,8 +9,8 @@ const Sidebar: React.FC = () => {
   };
 
   const toolNodes = [
-    { label: 'Code Generator' },
-    { label: 'Audio Synthesis' },
+    { label: 'Code Generator', icon: <CheckeredFlagIcon className="w-6 h-6" /> },
+    { label: 'Audio Synthesis', icon: <ToolIcon className="w-6 h-6" /> },
   ];
 
   return (
@@ -44,7 +43,7 @@ const Sidebar: React.FC = () => {
             onDragStart={(event) => onDragStart(event, 'tool', { label: tool.label })}
             draggable
           >
-            <ToolIcon className="w-6 h-6" />
+            {tool.icon}
             <span className="font-medium">{tool.label}</span>
           </div>
         ))}

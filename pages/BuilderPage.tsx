@@ -22,7 +22,7 @@ import TriggerNode from '../components/canvas/nodes/TriggerNode.tsx';
 import ToolNode from '../components/canvas/nodes/ToolNode.tsx';
 
 import { deployWorkflow } from '../services/adkApi.ts';
-import { AGENT_TEMPLATES, INITIAL_NODES, INITIAL_EDGES, ToolIcon, TriggerIcon } from '../constants.tsx';
+import { AGENT_TEMPLATES, INITIAL_NODES, INITIAL_EDGES, ToolIcon, TriggerIcon, CheckeredFlagIcon } from '../constants.tsx';
 import { NodeData, SerializedWorkflow } from '../types.ts';
 import { generateSvg } from '../lib/svgGenerator.ts';
 import { reconstructNodeIcons } from '../lib/utils.ts';
@@ -150,10 +150,16 @@ const BuilderPageContent: React.FC<BuilderPageProps> = ({ onFinalizeSuccess }) =
           icon: <TriggerIcon className="w-8 h-8 text-amber-400" />,
         };
       } else if (type === 'tool') {
+        let icon;
+        if (dropData.label === 'Code Generator') {
+          icon = <CheckeredFlagIcon className="w-6 h-6" />;
+        } else {
+          icon = <ToolIcon className="w-6 h-6" />;
+        }
         data = {
           label: dropData.label,
           type: 'tool',
-          icon: <ToolIcon className="w-6 h-6" />,
+          icon: icon,
         };
       } else {
         console.error('Unknown node type dropped:', type);
