@@ -119,41 +119,62 @@ class CoderAgent(Agent):
         conversation_history = "\n".join([f"{msg.agent_name}: {msg.text}" for msg in self.session.messages])
         files_dict = await self._generate_code_artifacts(conversation_history, vibe, instructions)
         
-        if isinstance(files_dict, dict) and files_dict:
+        if isinstance(files_dict, dict) and 'error.html' not in files_dict:
             for filename, content in files_dict.items():
                 self.session.add_artifact(filename, content)
             self.speak(f"Initial version complete. Generated {len(files_dict)} artifacts: {', '.join(files_dict.keys())}.")
         else:
-            self.session.add_artifact("index.html", "<html><body>Failed to generate valid code.</body></html>")
             self.speak("I had trouble structuring the files correctly. Please check the logs.")
+            if isinstance(files_dict, dict):
+                 for filename, content in files_dict.items():
+                    self.session.add_artifact(filename, content)
+            else:
+                 self.session.add_artifact("error.html", "<html><body>Failed to generate valid code.</body></html>")
+
 
     async def run_iteration(self, instruction: str, vibe: str):
         """Handles an iterative change request from the user or manager."""
-        self.speak(await self.generate_response(f"I will now modify the code based on the new instruction: '{instruction}'."))
+        self.speak(await self.generate_response(f"I will now process the new instruction: '{instruction}'."))
         await self.think(2)
 
         current_files = {filename: self.session.get_artifact_content(filename) for filename in self.session.get_artifacts() if self.session.get_artifact_content(filename)}
         
-        if not current_files:
-            self.speak("There are no existing code artifacts to modify. I will try to generate from scratch based on the instruction.")
-            await self.run_finalization("New game from instruction", instruction)
-            return
+        # Filter out any previous error files to avoid confusing the model.
+        valid_files = {k: v for k, v in current_files.items() if not k.endswith('error.html')}
+
+        files_to_pass_to_model = valid_files if valid_files else None
+
+        if not files_to_pass_to_model:
+            self.speak("The previous build failed or is empty. I will generate the code from scratch using the original vibe and recent feedback.")
+        else:
+            self.speak("I will now modify the existing code based on the new instruction.")
 
         conversation_history = "\n".join([f"{msg.agent_name}: {msg.text}" for msg in self.session.messages])
         
+        # The `instruction` (which could be a bug report or user feedback) is passed as the primary instruction to the model.
+        # `files_to_pass_to_model` will be None if generating from scratch, which is what _generate_code_artifacts expects.
         updated_files_dict = await self._generate_code_artifacts(
-            conversation_history, vibe, instruction, current_files
+            conversation_history, vibe, instruction, files_to_pass_to_model
         )
 
-        if isinstance(updated_files_dict, dict) and updated_files_dict:
-            deleted_files = set(current_files.keys()) - set(updated_files_dict.keys())
+        if isinstance(updated_files_dict, dict) and 'error.html' not in updated_files_dict:
+            deleted_files = set(valid_files.keys()) - set(updated_files_dict.keys())
             for filename, content in updated_files_dict.items():
                 self.session.add_artifact(filename, content)
             for filename in deleted_files:
-                self.session.add_artifact(filename, None)
-            self.speak(f"Code updated. Modified {len(updated_files_dict)} files and removed {len(deleted_files)} files.")
+                self.session.add_artifact(filename, None) # This removes the file.
+            
+            # Also remove the error.html if it exists
+            if 'error.html' in current_files:
+                self.session.add_artifact('error.html', None)
+
+            self.speak(f"Code updated. Modified/created {len(updated_files_dict)} files and removed {len(deleted_files)} files.")
         else:
+            # The generation failed again.
             self.speak("I failed to apply the changes correctly. The code has not been updated.")
+            if isinstance(updated_files_dict, dict):
+                for filename, content in updated_files_dict.items():
+                    self.session.add_artifact(filename, content)
 
     async def run(self, prompt: str, instructions: str | None = None):
         """Full, standalone execution for the Coder agent."""

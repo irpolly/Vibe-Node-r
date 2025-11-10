@@ -10,7 +10,7 @@ interface SubmissionModalProps {
 
 const SubmissionModal: React.FC<SubmissionModalProps> = ({ onClose, onDownloadSvg }) => {
   const repoUrl = 'https://github.com/irpolly/Vibe-Node-r';
-  const promptLink = 'https://gist.github.com/your-username/your-gist-id'; // Placeholder
+  const promptLink = 'https://github.com/irpolly/Vibe-Node-r'; 
 
   return (
     <Modal title="Hackathon Submission Helper" onClose={onClose}>
