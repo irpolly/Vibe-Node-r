@@ -1,8 +1,7 @@
 #// Grok got your weights!!!
 import asyncio
-import os
 from typing import TYPE_CHECKING, Dict, Any
-import google.generativeai as genai
+from vertexai.generative_models import GenerativeModel
 
 if TYPE_CHECKING:
     from session import Session
@@ -31,10 +30,10 @@ class Agent:
         self.session.add_message(self.role, text)
 
     async def generate_response(self, prompt: str) -> str:
-        """Generates a response using the Gemini API."""
+        """Generates a response using the Vertex AI Gemini API."""
         try:
-            # Just-in-time model instantiation ensures it's in the correct event loop
-            model = genai.GenerativeModel(MODEL_NAME)
+            # Instantiating the model from the Vertex AI SDK
+            model = GenerativeModel(MODEL_NAME)
             full_prompt = f"You are an AI agent acting as a {self.role} in a team. Your personality should be professional but concise. Based on the following prompt, provide your response or update in 1-2 sentences.\n\nPROMPT: \"{prompt}\""
             response = await model.generate_content_async(full_prompt)
             return response.text.strip()
@@ -99,7 +98,7 @@ class CoderAgent(Agent):
         self.speak("All done. Final code generated and ready for the run window.")
 
     async def _generate_final_code(self, conversation: str, vibe: str) -> str:
-        """Generates the final HTML game file using the Gemini API."""
+        """Generates the final HTML game file using the Vertex AI Gemini API."""
         prompt = f"""
         Based on the following development team conversation and the initial "vibe", act as an expert frontend developer.
         Your task is to generate a complete, single-file HTML document that implements the described game.
@@ -114,8 +113,8 @@ class CoderAgent(Agent):
         Generate the HTML file now. Ensure the output is ONLY the HTML code, starting with <!DOCTYPE html>.
         """
         try:
-            # Just-in-time model instantiation
-            model = genai.GenerativeModel(MODEL_NAME)
+            # Instantiating the model from the Vertex AI SDK
+            model = GenerativeModel(MODEL_NAME)
             response = await model.generate_content_async(prompt)
             text = response.text.strip()
             if '```html' in text:

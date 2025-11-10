@@ -4,7 +4,7 @@ import time
 from agents import ManagerAgent, CoderAgent, DesignerAgent, TesterAgent, WriterAgent, Agent
 from typing import List, Dict, Any
 import asyncio
-import google.generativeai as genai
+import vertexai
 
 # --- Data Structures ---
 class Message:
@@ -99,13 +99,16 @@ class Session:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            # Configure genai at the start of the thread's life
-            # This ensures it's configured in the correct event loop context
-            api_key = os.environ.get("API_KEY")
-            if not api_key:
-                raise ValueError("API_KEY environment variable not found in thread.")
-            genai.configure(api_key=api_key)
-            print("✅ Gemini API configured successfully within the worker thread.")
+            # Initialize Vertex AI SDK within the thread.
+            # It will automatically use the service account credentials in Cloud Run.
+            project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
+            if not project_id:
+                raise ValueError("GOOGLE_CLOUD_PROJECT environment variable not set.")
+            
+            # A common region for Vertex AI services.
+            location = "us-central1" 
+            vertexai.init(project=project_id, location=location)
+            print(f"✅ Vertex AI SDK initialized for project '{project_id}' in location '{location}'.")
 
             # Now run the agent logic
             if not self.root_agent_id or self.root_agent_id not in self.agents:

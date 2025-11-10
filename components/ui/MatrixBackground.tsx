@@ -20,7 +20,7 @@ const MatrixBackground: React.FC = () => {
       drops[i] = { y: 1, isWord: false, wordIndex: 0, fallUntil: null };
     }
 
-    const characters = '的一是在不了有和人这中大为上个国我以要他时来用们生到作地于出就分对成会可主发年动同工也能下';
+    const characters = 'アァカサタナハマヤャラワガザダバパイィキシチニヒミリヰギジヂビピウゥクスツヌフムユュルグズブヅプエェケセテネヘメレヱゲゼデベペオォコソトノホモヨョロヲゴゾドボポヴッン';
     const specialWord = ['V', 'i', 'b', 'e', 'N', 'o', 'd', 'e', '(r)'];
     const specialWordColor = '#FF0000'; // Red
     const defaultColor = '#800020'; // Burgundy
