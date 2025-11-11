@@ -75,7 +75,7 @@ const agentColors: Record<string, string> = {
     'Writer Agent': 'text-rose-400',
     'System': 'text-gray-400',
 };
-className
+
 const API_BASE_URL = import.meta.env?.DEV ? "http://127.0.0.1:5000" : "";
 
 const OutputPage: React.FC<OutputPageProps> = ({ onBack, workflowId }) => {
