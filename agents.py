@@ -120,15 +120,15 @@ class CoderAgent(Agent):
         try:
             model_name = self.config.get("llm", "gemini-2.5-flash")
             system = (
-                "You are a Coder Agent. Return **only** a JSON object where each key is a filename "
+                "You are a Coder Agent. Return a JSON object where each key is a filename "
                 "and each value is the complete file content. No markdown fences, no explanations."
             )
             model = GenerativeModel(model_name, system_instruction=system)
 
             generation_config = {
                 "response_mime_type": "application/json",
-                "max_output_tokens": 16384,
-                "thinking_config": {"thinking_budget": 8192}
+                "max_output_tokens": 30208,
+                "thinking_config": {"thinking_budget": 12800}
             }
 
             response = await model.generate_content_async(prompt, generation_config=generation_config)
@@ -149,7 +149,7 @@ class CoderAgent(Agent):
     async def run_finalization(self, vibe: str, instructions: str | None = None):
         instr = f" Also apply: {instructions}" if instructions else ""
         prompt = (
-            f"Generate a **complete, playable web game** for the vibe “{vibe}”{instr}. "
+            f"Generate a **single level, playable web game** for the vibe “{vibe}”{instr}. "
             "Return a JSON object with filenames (e.g., index.html, style.css, game.js) "
             "and their full source code. Use Kaboom.js / Phaser for game logic, "
             "GSAP for UI animations, Howler.js for audio."
@@ -225,7 +225,7 @@ class TesterAgent(Agent):
         Current files:
         {code_block}
 
-        Respond **exactly** with:
+        Respond with:
         - `[PASS]` + short confirmation **or**
         - `[BUG]` + concise, actionable bug report for the Coder.
         """
