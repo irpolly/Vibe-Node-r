@@ -326,3 +326,5 @@ class WriterAgent(Agent):
         full_prompt = f"{prompt}. {instruction_text} You can suggest story elements that imply game mechanics or sound cues (e.g., '[A laser fires with a sharp *pew* sound]'), knowing the Coder can use powerful game and audio libraries to implement them."
         response = await self.generate_response(full_prompt)
         self.speak(response)
+
+# End of agents.py ---

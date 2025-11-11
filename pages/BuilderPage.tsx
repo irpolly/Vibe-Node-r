@@ -84,8 +84,7 @@ const BuilderPageContent: React.FC<BuilderPageProps> = ({ onFinalizeSuccess }) =
         handleResetLayout();
     }
     setIsInitialLoad(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    }, []);
 
   // Auto-save session on change (debounced)
   useEffect(() => {

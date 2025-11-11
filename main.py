@@ -186,3 +186,4 @@ if __name__ == '__main__':
     if not os.path.exists(app.config['ARTIFACT_FOLDER']):
         os.makedirs(app.config['ARTIFACT_FOLDER'])
     app.run(debug=True, port=5000)
+# End of main.py ---
