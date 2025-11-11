@@ -1,35 +1,18 @@
 # agents.py
 import asyncio
 import json
-from typing import TYPE_CHECKING, Dict, Any
-
+from typing import TYPE_CHECKING, Dict, Any, List
 from vertexai.generative_models import GenerativeModel
 
 if TYPE_CHECKING:
     from session import Session
 
-# ---------------------------------------------------------------------------
-# Helper – CSS-styled “speak”
-# ---------------------------------------------------------------------------
-def _css_speak(role: str, text: str) -> str:
-    """
-    Returns an HTML snippet that the UI will inject into the chat bubble.
-    Colors match the agent palette defined in constants.tsx.
-    """
-    color_map = {
-        "Manager Agent": "bg-orange-600 text-white",
-        "Coder Agent":   "bg-blue-600 text-white",
-        "Designer Agent":"bg-purple-600 text-white",
-        "Tester Agent":  "bg-green-600 text-white",
-        "Writer Agent":  "bg-rose-600 text-white",
-    }
-    bg = color_map.get(role, "bg-gray-600 text-white")
-    return f'<div class="inline-block px-3 py-1.5 rounded-lg {bg} text-sm font-medium">{text}</div>'
-
-# ---------------------------------------------------------------------------
-# Base Agent
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- #
+#  Base Agent
+# --------------------------------------------------------------------------- #
 class Agent:
+    """Base class for all agents in the system."""
+
     def __init__(self, node_id: str, config: Dict[str, Any], session: 'Session'):
         self.node_id = node_id
         self.config = config
@@ -39,15 +22,12 @@ class Agent:
     async def think(self, duration_s: float = 1.0):
         await asyncio.sleep(duration_s)
 
-    # ------------------------------------------------------------------- #
-    # NEW: speak → CSS-styled HTML
-    # ------------------------------------------------------------------- #
     def speak(self, text: str):
-        html = _css_speak(self.role, text)
-        print(f"[{self.role}]: {text}")               # keep console log
-        self.session.add_message(self.role, html)     # UI receives HTML
+        print(f"[{self.role}]: {text}")
+        self.session.add_message(self.role, text)
 
     async def generate_response(self, prompt: str) -> str:
+        """Call Gemini (system instruction forces concise, professional tone)."""
         try:
             model_name = self.config.get("llm", "gemini-2.5-flash")
             system_instruction = (
@@ -65,14 +45,21 @@ class Agent:
     async def run(self, prompt: str, instructions: str | None = None):
         raise NotImplementedError
 
-# ---------------------------------------------------------------------------
-# ManagerAgent – orchestrates phases (same logic, CSS speak)
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- #
+#  ManagerAgent – orchestrates the exact phases described in the README
+# --------------------------------------------------------------------------- #
 class ManagerAgent(Agent):
+    """
+    1. Kick-off → Writer + Designer (ideation)
+    2. Coder → initial code generation
+    3. Tester → test-fix loop (max 2 retries)
+    4. Finalise
+    """
     async def run(self, vibe: str, instructions: str | None = None):
         self.speak(f"Starting project for vibe: “{vibe}”")
         await self.think(1)
 
+        # locate peers
         writer   = next((a for a in self.session.agents.values() if isinstance(a, WriterAgent)), None)
         designer = next((a for a in self.session.agents.values() if isinstance(a, DesignerAgent)), None)
         coder    = next((a for a in self.session.agents.values() if isinstance(a, CoderAgent)), None)
@@ -116,6 +103,7 @@ class ManagerAgent(Agent):
         self.speak("Workflow complete – artifacts ready for preview/download.")
 
     async def run_instruction(self, instruction: str):
+        """Iterative user command → always routed to Coder."""
         self.speak(f"New user instruction: “{instruction}”")
         coder = next((a for a in self.session.agents.values() if isinstance(a, CoderAgent)), None)
         if coder:
@@ -123,11 +111,12 @@ class ManagerAgent(Agent):
         else:
             self.speak("No Coder Agent found to apply the instruction.")
 
-# ---------------------------------------------------------------------------
-# CoderAgent – JSON file generation (CSS speak)
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- #
+#  CoderAgent – JSON-structured file generation (README step 5)
+# --------------------------------------------------------------------------- #
 class CoderAgent(Agent):
     async def _gemini_json(self, prompt: str) -> Dict[str, str]:
+        """Force Gemini to return a JSON map {filename: content}."""
         try:
             model_name = self.config.get("llm", "gemini-2.5-flash")
             system = (
@@ -148,6 +137,7 @@ class CoderAgent(Agent):
             if raw.endswith("```"): raw = raw[:-3]
             return json.loads(raw)
         except Exception as e:
+            # Fallback error page – still returns a dict so the caller never breaks
             html = f"""
             <html><head><title>Coder Error</title></head>
             <body style="font-family:monospace;background:#111;color:#f00;">
@@ -167,9 +157,10 @@ class CoderAgent(Agent):
         files = await self._gemini_json(prompt)
         for name, content in files.items():
             self.session.add_artifact(name, content)
-        self.speak(f"Initial code generation finished – {len(files)} file(s) saved.")
+        self.speak("Initial code generation finished – files saved as artifacts.")
 
     async def run_iteration(self, instruction: str, original_vibe: str):
+        # Provide current files so the model can edit in-place
         current = {
             f: self.session.get_artifact_content(f)
             for f in self.session.get_artifacts()
@@ -181,16 +172,17 @@ class CoderAgent(Agent):
             f"Current project files:\n{context}\n\n"
             f"Original vibe: “{original_vibe}”\n"
             f"Apply the following change: {instruction}\n"
-            "Return a **new JSON object** containing **only the files that changed**."
+            "Return a **new JSON object** containing **only the files that changed** "
+            "(or the full set if easier). Keep existing files untouched unless modified."
         )
         updated = await self._gemini_json(prompt)
         for name, content in updated.items():
             self.session.add_artifact(name, content)
         self.speak(f"Applied instruction – updated {len(updated)} file(s).")
 
-# ---------------------------------------------------------------------------
-# DesignerAgent – CSS speak
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- #
+#  DesignerAgent – produces descriptive asset list (README step 4)
+# --------------------------------------------------------------------------- #
 class DesignerAgent(Agent):
     async def run(self, prompt: str, instructions: str | None = None):
         extra = f" Also: {instructions}" if instructions else ""
@@ -206,9 +198,9 @@ class DesignerAgent(Agent):
         assets = await self.generate_response(assets_prompt)
         self.speak(assets)
 
-# ---------------------------------------------------------------------------
-# TesterAgent – CSS speak, returns [PASS]/[BUG]
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- #
+#  TesterAgent – returns [PASS] or [BUG] (README step 6)
+# --------------------------------------------------------------------------- #
 class TesterAgent(Agent):
     async def run(self, prompt: str, instructions: str | None = None) -> str:
         files = {
@@ -241,9 +233,9 @@ class TesterAgent(Agent):
         self.speak(verdict)
         return verdict
 
-# ---------------------------------------------------------------------------
-# WriterAgent – CSS speak
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- #
+#  WriterAgent – generates story & cut-scenes (README step 4)
+# --------------------------------------------------------------------------- #
 class WriterAgent(Agent):
     async def run(self, prompt: str, instructions: str | None = None):
         extra = f" Also consider: {instructions}" if instructions else ""
