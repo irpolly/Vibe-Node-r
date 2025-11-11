@@ -8,6 +8,13 @@ from vertexai.generative_models import GenerativeModel
 if TYPE_CHECKING:
     from session import Session
 
+# --------------------------------------------------------------------- #
+#  Plain-text speak – UI will colour it via agentColors
+# --------------------------------------------------------------------- #
+def _plain_speak(self, text: str):
+    print(f"[{self.role}]: {text}")
+    self.session.add_message(self.role, text)
+
 # ---------------------------------------------------------------------------
 # Helper – CSS-styled “speak”
 # ---------------------------------------------------------------------------
@@ -52,7 +59,7 @@ class Agent:
             model_name = self.config.get("llm", "gemini-2.5-flash")
             system_instruction = (
                 f"You are an AI agent acting as a {self.role} in a team. "
-                "Be professional but concise. Answer in 1-2 sentences."
+                "Be professional but concise."
             )
             model = GenerativeModel(model_name, system_instruction=system_instruction)
             response = await model.generate_content_async(prompt)
@@ -126,8 +133,72 @@ class ManagerAgent(Agent):
 # ---------------------------------------------------------------------------
 # CoderAgent – JSON file generation (CSS speak)
 # ---------------------------------------------------------------------------
+# === GROUNDED CODER AGENT – PHASER 3 EDITION (drop-in replacement for agents.py) ===
 class CoderAgent(Agent):
+    # ⚡ PHASER 3 BOILERPLATE – battle-tested, always works
+    BOILERPLATE = {
+        "index.html": """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Vibe Game</title>
+  <link rel="stylesheet" href="style.css" />
+  <!-- PHASER 3 CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+  <!-- GSAP for UI -->
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.2/dist/gsap.min.js"></script>
+  <!-- Howler for audio -->
+  <script src="https://cdn.jsdelivr.net/npm/howler@2.2.4/dist/howler.min.js"></script>
+</head>
+<body>
+  <div id="game"></div>
+  <script src="game.js"></script>
+</body>
+</html>""",
+        "style.css": """* { margin:0; padding:0; box-sizing:border-box; }
+body, html { 
+  width:100%; height:100%; overflow:hidden; 
+  background:#111; font-family:monospace;
+}
+#game { width:100vw; height:100vh; }""",
+        "game.js": """// PHASER 3 GAME BOILERPLATE
+const config = {
+  type: Phaser.AUTO,
+  width: 800,
+  height: 600,
+  parent: 'game',
+  scene: { preload: preload, create: create, update: update },
+  scale: {
+    mode: Phaser.Scale.FIT,
+    autoCenter: Phaser.Scale.CENTER_BOTH
+  },
+  backgroundColor: '#111827'
+};
+
+let game = new Phaser.Game(config);
+
+function preload() {
+  // Assets loaded here
+  this.load.image('background', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==');
+}
+
+function create() {
+  // Game starts here
+  this.add.text(400, 300, 'Vibe Game Ready!', { 
+    fontSize: '32px', fill: '#38bdf8', 
+    stroke: '#000', strokeThickness: 4 
+  }).setOrigin(0.5);
+}
+
+function update() {
+  // Game loop
+}
+"""
+    }
+
     async def _gemini_json(self, prompt: str) -> Dict[str, str]:
+        """Force JSON output (unchanged from before)"""
         try:
             model_name = self.config.get("llm", "gemini-2.5-flash")
             system = (
@@ -151,42 +222,25 @@ class CoderAgent(Agent):
             html = f"""
             <html><head><title>Coder Error</title></head>
             <body style="font-family:monospace;background:#111;color:#f00;">
-            <h1>Coder Agent Failure</h1><pre>{e}</pre>
+            <h1>Phaser 3 Coder Failure</h1><pre>{e}</pre>
             </body></html>
             """
             return {"error.html": html}
 
     async def run_finalization(self, vibe: str, instructions: str | None = None):
+        """🚀 Generate complete Phaser 3 game from vibe"""
         instr = f" Also apply: {instructions}" if instructions else ""
-        prompt = (
-            f"Generate a **complete, playable web game** for the vibe “{vibe}”{instr}. "
-            "Return a JSON object with filenames (e.g., index.html, style.css, game.js) "
-            "and their full source code. Use Kaboom.js / Phaser for game logic, "
-            "GSAP for UI animations, Howler.js for audio."
-        )
-        files = await self._gemini_json(prompt)
-        for name, content in files.items():
-            self.session.add_artifact(name, content)
-        self.speak(f"Initial code generation finished – {len(files)} file(s) saved.")
+        prompt = f"""
+You are a professional Phaser 3 game developer.
 
-    async def run_iteration(self, instruction: str, original_vibe: str):
-        current = {
-            f: self.session.get_artifact_content(f)
-            for f in self.session.get_artifacts()
-            if self.session.get_artifact_content(f)
-        }
-        context = "\n".join([f"--- {fn} ---\n{c}\n" for fn, c in current.items()])
+**TASK**: Build a **complete, playable Phaser 3 web game** for vibe: "{vibe}"{instr}
 
-        prompt = (
-            f"Current project files:\n{context}\n\n"
-            f"Original vibe: “{original_vibe}”\n"
-            f"Apply the following change: {instruction}\n"
-            "Return a **new JSON object** containing **only the files that changed**."
-        )
-        updated = await self._gemini_json(prompt)
-        for name, content in updated.items():
-            self.session.add_artifact(name, content)
-        self.speak(f"Applied instruction – updated {len(updated)} file(s).")
+**MANDATORY STRUCTURE** (return JSON with EXACTLY these 3 files):
+1. `index.html` → Use the HTML boilerplate with Phaser 3.80.1 CDN, GSAP, Howler
+2. `style.css` → Responsive, mobile-first, dark theme (#111827 bg)
+3. `game.js` → **Full Phaser 3 game** with preload/create/update"""
+
+**PHASER 3 RULES**:
 
 # ---------------------------------------------------------------------------
 # DesignerAgent – CSS speak
@@ -237,6 +291,7 @@ class TesterAgent(Agent):
         - `[PASS]` + short confirmation **or**
         - `[BUG]` + concise, actionable bug report for the Coder.
         """
+
         verdict = await self.generate_response(tester_prompt)
         self.speak(verdict)
         return verdict
