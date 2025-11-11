@@ -201,7 +201,14 @@ def zip_session(session_id):
 def health():
     return "OK"
 
+<<<<<<< Updated upstream
 
 if __name__ == "__main__":
     # For local dev
     app.run(host="0.0.0.0", port=5000, debug=True)
+=======
+if __name__ == '__main__':
+    if not os.path.exists(app.config['ARTIFACT_FOLDER']):
+        os.makedirs(app.config['ARTIFACT_FOLDER'])
+    app.run(debug=True, port=5000)
+>>>>>>> Stashed changes

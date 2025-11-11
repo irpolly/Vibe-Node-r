@@ -283,6 +283,7 @@ def create_agents(canvas_cfg: Dict[str, Any]) -> Dict[str, BaseAgent]:
         instr = node.get("instructions", "")
         tools = node.get("tools", [])
 
+<<<<<<< Updated upstream
         if typ == "Coder":
             ag = CoderAgent(instr)
         elif typ == "Tester":
@@ -294,3 +295,11 @@ def create_agents(canvas_cfg: Dict[str, Any]) -> Dict[str, BaseAgent]:
         agents[nid] = ag
 
     return agents
+=======
+class WriterAgent(Agent):
+    async def run(self, prompt: str, instructions: str | None = None):
+        instruction_text = f"Take these user instructions into account: {instructions}" if instructions else ""
+        full_prompt = f"{prompt}. {instruction_text} You can suggest story elements that imply game mechanics or sound cues (e.g., '[A laser fires with a sharp *pew* sound]'), knowing the Coder can use powerful game and audio libraries to implement them."
+        response = await self.generate_response(full_prompt)
+        self.speak(response)
+>>>>>>> Stashed changes
