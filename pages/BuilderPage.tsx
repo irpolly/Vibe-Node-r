@@ -11,7 +11,6 @@ import ReactFlow, {
   Edge,
   Node,
 } from 'reactflow';
-
 import Sidebar from '../components/sidebar/Sidebar.tsx';
 import Toolbar from '../components/toolbar/Toolbar.tsx';
 import AgentConfigModal from '../components/modals/AgentConfigModal.tsx';
@@ -20,7 +19,6 @@ import Toast from '../components/ui/Toast.tsx';
 import AgentNode from '../components/canvas/nodes/AgentNode.tsx';
 import TriggerNode from '../components/canvas/nodes/TriggerNode.tsx';
 import ToolNode from '../components/canvas/nodes/ToolNode.tsx';
-
 import { deployWorkflow } from '../services/adkApi.ts';
 import { AGENT_TEMPLATES, INITIAL_NODES, INITIAL_EDGES, ToolIcon, TriggerIcon, CheckeredFlagIcon } from '../constants.tsx';
 import { NodeData, SerializedWorkflow } from '../types.ts';
@@ -84,8 +82,7 @@ const BuilderPageContent: React.FC<BuilderPageProps> = ({ onFinalizeSuccess }) =
         handleResetLayout();
     }
     setIsInitialLoad(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    }, []);
 
   // Auto-save session on change (debounced)
   useEffect(() => {
