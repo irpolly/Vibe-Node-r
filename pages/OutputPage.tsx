@@ -111,6 +111,39 @@ const OutputPage: React.FC<OutputPageProps> = ({ onBack, workflowId }) => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [agentMessages]);
 
+  // synopsis setup and event listeners
+  useEffect(() => {
+   if (!gameOutput) return;
+
+    // === LIVE DESIGN SYNOPSIS ===
+    UIManager.setSynopsis(`
+  # ECHO OF SELF – LIVE DESIGN
+
+  **Core Loop**: Ael + Shadow = one soul, two minds.  
+  **Win**: Loyalty >90 → Harmony  
+  **Lose**: Rebellion =100 → Dark Ending  
+
+  **5 Levels**:  
+  1. Whispering Woods (tutorial)  
+  2. Ruined City (combat)  
+  3. Arcane Library (puzzle)  
+  4. Shadow Plane (inverted)  
+  5. Final Arena (choice)  
+
+  **Vibe**: *“What if your shadow had opinions?”*
+    `);
+
+  // === LEVEL COMPLETION LISTENER ===
+  const handleLevelComplete = ((e: CustomEvent) => {
+    UIManager.log(`Level ${e.detail.level} complete! Moving to ${e.detail.next}`);
+  }) as EventListener;
+  window.addEventListener('levelcomplete', handleLevelComplete);
+
+  return () => {
+    window.removeEventListener('levelcomplete', handleLevelComplete);
+  };
+}, [gameOutput]);
+
   // Cleanup polling on component unmount
   useEffect(() => {
     return () => {
@@ -422,3 +455,22 @@ const OutputPage: React.FC<OutputPageProps> = ({ onBack, workflowId }) => {
 };
 
 export default OutputPage;
+// ADD THIS useEffect (anywhere in the file)
+useEffect(() => {
+  if (!gameOutput) return;
+  UIManager.setSynopsis(`...`); // ← paste synopsis
+  const handler = ((e: CustomEvent) => UIManager.log(...)) as EventListener;
+  window.addEventListener('levelcomplete', handler);
+  return () => window.removeEventListener('levelcomplete', handler);
+}, [gameOutput]);
+
+// IN YOUR EXISTING LEVEL COMPLETE LOGIC
+this.events.emit('levelcomplete', { 
+  level: this.levelData.name, 
+  next: LEVELS[this.currentLevel + 1]?.name || 'Win' 
+});
+
+// Or via window (if scene is sandboxed)
+window.dispatchEvent(new CustomEvent('levelcomplete', { 
+  detail: { level: 'Forest', next: 'City' } 
+}));

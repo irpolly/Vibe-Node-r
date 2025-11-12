@@ -22,8 +22,8 @@ const MatrixBackground: React.FC = () => {
 
     const characters = 'アァカサタナハマヤャラワガザダバパイィキシチニヒミリヰギジヂビピウゥクスツヌフムユュルグズブヅプエェケセテネヘメレヱゲゼデベペオォコソトノホモヨョロヲゴゾドボポヴッン';
     const specialWord = ['V', 'i', 'b', 'e', 'N', 'o', 'd', 'e', '(r)'];
-    const specialWordColor = '#FF0000'; // Red
-    const defaultColor = '#800020'; // Burgundy
+    const specialWordColor = '#001affff';
+    const defaultColor = '#090b6dff'; 
 
     const draw = () => {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';

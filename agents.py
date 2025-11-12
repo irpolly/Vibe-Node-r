@@ -3,6 +3,7 @@ import asyncio
 import json
 import os
 from typing import TYPE_CHECKING, Dict, Any, List
+from j
 
 from vertexai.generative_models import GenerativeModel
 
@@ -147,7 +148,16 @@ class ManagerAgent(Agent):
     def _find(self, cls):
         return next((a for a in self.session.agents.values() if isinstance(a, cls)), None)
 
+level_manifest = [
+    {"key": "forest", "name": "Whispering Woods", "goal": "Find the Rune"},
+    {"key": "city", "name": "Ruined City", "goal": "Defeat the Cultist"},
+    {"key": "library", "name": "Arcane Library", "goal": "Solve the Puzzle"},
+    {"key": "shadow", "name": "Shadow Plane", "goal": "Survive Inversion"},
+    {"key": "boss", "name": "Final Arena", "goal": "Choose Your Fate"}
+]
 
+output_json["levels"] = level_manifest
+output_json["config"]["scene"] = ["BootScene", "TitleScene", "PlayScene", "WinScene", "LoseScene"]
 # --------------------------------------------------------------------------- #
 # Writer – produces a single markdown design plan
 # --------------------------------------------------------------------------- #
@@ -181,7 +191,7 @@ class DesignerAgent(Agent):
         prompt = f"""
 You are the Designer. Using the plan below, list **every visual / audio asset** the game needs.
 Return a JSON object where each key is the filename (e.g. "player.png") and the value is a
-short description of the asset.  Do **not** generate real image data – just the description.
+short description of the asset.  Generate real data pass to coder via manager, copies of raw assets to be output to zip file. titled "assets.zip". Raw uncompressed assets to be base64 encoded within json object.
 
 Plan:
 {plan}
@@ -219,13 +229,13 @@ class CoderAgent(Agent):
     async def run(self, vibe: str, plan: str, assets: Dict[str, str], instructions: str | None):
         asset_list = "\n".join(f"- {k}: {v.splitlines()[1] if v else ''}".strip() for k, v in assets.items())
         prompt = f"""
-You are the Coder. Implement the game **exactly** as described in the plan.
+You are the Coder. Implement the game as described in the plan.
 Use **Phaser 3** (load from CDN).  Do **not** use Kaboom.
 
 Plan:
 {plan}
 
-Required assets (filenames only – content will be placeholders):
+Required assets (Incorporate assets into the code, do not leave placeholders, do not give raw/unincorporated assets to user):
 {asset_list}
 
 Return a JSON object:
@@ -233,7 +243,7 @@ Return a JSON object:
   "index.html": "...",
   "game.js": "...",
   "style.css": "...",
-  ... any other files ...
+  ... any other required/requested files ...
 }}
 
 {instructions or ""}
