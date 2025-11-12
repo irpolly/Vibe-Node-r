@@ -2,10 +2,18 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// https://vitejs.dev/config/
+
 export default defineConfig({
-  plugins: [react()],
+  // ... your existing config
   build: {
-    outDir: 'build'
-  }
-})
+    outDir: 'build',
+    rollupOptions: {
+      external: [],  // Explicitly NO externals for /index.tsx
+    },
+  },
+  resolve: {
+    alias: {
+      '/index.tsx': resolve(__dirname, 'index.tsx'),  // Root alias
+    },
+  },
+});
