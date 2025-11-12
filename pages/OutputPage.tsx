@@ -455,14 +455,21 @@ const OutputPage: React.FC<OutputPageProps> = ({ onBack, workflowId }) => {
 };
 
 export default OutputPage;
-// ADD THIS useEffect (anywhere in the file)
+
+/// Fixed useEffect in OutputPage.tsx (around line 460)
 useEffect(() => {
   if (!gameOutput) return;
-  UIManager.setSynopsis(`...`); // ← paste synopsis
-  const handler = ((e: CustomEvent) => UIManager.log(...)) as EventListener;
+  UIManager.setSynopsis(gameSynopsis || 'Awaiting agent vibes...'); // Assuming synopsis var; tweak if needed
+
+  // Fixed: Removed stray ) after type assertion
+  const handler = ((e: CustomEvent) => {
+    UIManager.log(`Level complete! Score: ${e.detail?.score || 'N/A'}`);
+    // Add any other log/iteration logic here
+  }) as EventListener;  // ← Clean now—no extra )
+
   window.addEventListener('levelcomplete', handler);
   return () => window.removeEventListener('levelcomplete', handler);
-}, [gameOutput]);
+}, [gameOutput, gameSynopsis]); // Add deps if synopsis changes
 
 // IN YOUR EXISTING LEVEL COMPLETE LOGIC
 this.events.emit('levelcomplete', { 
