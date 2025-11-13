@@ -1,188 +1,194 @@
-
+# main.py
 import os
-import io
+import json
+import base64
 import zipfile
-from flask import Flask, request, jsonify, abort, send_from_directory, send_file
-from flask_cors import CORS
-from session import Session
-import uuid
-import threading
-import vertexai
+from io import BytesIO
+from datetime import datetime
+from flask import (
+    Flask, request, jsonify, send_file,
+    send_from_directory, abort
+)
+from google.cloud import storage
+from agents import create_agents, BaseAgent
 
-# --- App Initialization ---
-app = Flask(__name__, static_folder='build', static_url_path='')
-CORS(app) # Enable Cross-Origin Resource Sharing for local dev
-app.config['ARTIFACT_FOLDER'] = os.path.join(os.getcwd(), 'artifacts')
+# ----------------------------------------------------------------------
+# Flask + static build folder
+# ----------------------------------------------------------------------
+app = Flask(__name__, static_folder="build", static_url_path="/")
+SESSIONS_ROOT = "sessions"
+os.makedirs(SESSIONS_ROOT, exist_ok=True)
 
-# --- Vertex AI Initialization ---
-# In a Cloud Run environment, project and location can often be inferred.
-# We'll initialize it here once at startup for robustness.
-try:
-    # The project and location are usually available as environment variables in Cloud Run.
-    project_id = os.environ.get('GOOGLE_CLOUD_PROJECT')
-    location = os.environ.get('GOOGLE_CLOUD_REGION') # e.g., 'europe-west4'
-    
-    if not project_id or not location:
-        print("⚠️  GOOGLE_CLOUD_PROJECT or GOOGLE_CLOUD_REGION not set. vertexai.init() will try to infer them.")
-        # For local testing, you might need to set these manually or use `gcloud auth application-default login`
-        vertexai.init()
-        print("✅ Vertex AI initialized with inferred settings.")
+# ----------------------------------------------------------------------
+# Helper: write artifact (text or base64 media)
+# ----------------------------------------------------------------------
+def write_artifact(session_dir: str, filename: str, content: str):
+    path = os.path.join(session_dir, "artifacts", filename)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+
+    if content.strip().startswith("data:"):
+        header, b64 = content.split(",", 1)
+        raw = base64.b64decode(b64)
+        ext = header.split(";")[0].split("/")[-1]
+        final_path = os.path.splitext(path)[0] + f".{ext}"
+        with open(final_path, "wb") as f:
+            f.write(raw)
+        return final_path
     else:
-        vertexai.init(project=project_id, location=location)
-        print(f"✅ Vertex AI initialized successfully for project: {project_id} in location: {location}")
-
-except Exception as e:
-    # This will print a clear error to the logs if initialization fails, which is critical for debugging "Service Unavailable" errors.
-    print(f"❌ FATAL: Failed to initialize Vertex AI: {e}")
-    # This is a non-recoverable error, so we log it prominently. The app will likely fail health checks.
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+        return path
 
 
-# In-memory storage for active sessions. In a production environment,
-# this would be replaced with a database like Redis or Firestore.
-SESSIONS = {}
-
-# --- Helper Functions ---
-def get_session(session_id):
-    """Retrieves a session or aborts if not found."""
-    session = SESSIONS.get(session_id)
-    if not session:
-        abort(404, description=f"Session with ID '{session_id}' not found.")
-    return session
-
-# --- API Endpoints ---
-@app.route('/api/deploy', methods=['POST'])
-def deploy_workflow():
-    """
-    Creates a new virtual environment (Session) for a given workflow.
-    """
-    workflow_data = request.json
-    if not workflow_data or 'nodes' not in workflow_data or 'edges' not in workflow_data:
-        abort(400, description="Invalid workflow data provided.")
-
-    session_id = str(uuid.uuid4())
-    artifact_path = os.path.join(app.config['ARTIFACT_FOLDER'], session_id)
-    
-    try:
-        new_session = Session(session_id, workflow_data, artifact_path)
-        SESSIONS[session_id] = new_session
-        print(f"✅ New session created: {session_id}. Total sessions: {len(SESSIONS)}")
-        return jsonify({"success": True, "workflowId": session_id}), 201
-    except Exception as e:
-        print(f"❌ Error creating session: {e}")
-        abort(500, description=f"Failed to prepare the session environment: {e}")
-
-@app.route('/api/run', methods=['POST'])
-def run_session():
-    """
-    Starts the execution of a deployed workflow with a user-provided vibe.
-    This runs the agent workflow in a background thread to not block the API.
-    """
+# ----------------------------------------------------------------------
+# /finalize – receives canvas + vibe → creates ADK root_agent & runs
+# ----------------------------------------------------------------------
+@app.route("/finalize", methods=["POST"])
+def finalize():
     data = request.json
-    session_id = data.get('workflowId')
-    vibe = data.get('vibe')
-    instructions = data.get('instructions') # Can be None
+    vibe = data.get("vibe", "")
+    canvas_cfg = data.get("config", {})
+    root_id = data.get("root_node_id")
 
-    if not session_id or not vibe:
-        abort(400, description="Missing 'workflowId' or 'vibe' in request.")
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    session_id = f"{ts}_{os.urandom(4).hex()}"
+    session_dir = os.path.join(SESSIONS_ROOT, session_id)
+    artifacts_dir = os.path.join(session_dir, "artifacts")
+    staging_dir = os.path.join(session_dir, "staging")
+    os.makedirs(artifacts_dir, exist_ok=True)
+    os.makedirs(staging_dir, exist_ok=True)
 
-    session = get_session(session_id)
-    
-    if session.is_running():
-        abort(409, description="Session is already running.")
+    agents = create_agents(canvas_cfg)
 
-    # Run the workflow in a separate thread to avoid blocking the request
-    thread = threading.Thread(target=session.run_workflow, args=(vibe, instructions))
-    thread.start()
-    
-    print(f"🚀 Kicking off workflow for session: {session_id}")
-    return jsonify({"success": True, "message": "Workflow execution started."}), 202
+    if not root_id or root_id not in agents:
+        for nid, ag in agents.items():
+            if "manager" in ag.role.lower():
+                root_id = nid
+                break
+        else:
+            return jsonify({"error": "No root manager defined"}), 400
 
-@app.route('/api/instruct', methods=['POST'])
-def instruct_session():
-    """
-    Sends a new instruction to an active session for iterative changes.
-    """
-    data = request.json
-    session_id = data.get('workflowId')
-    instruction = data.get('instruction')
+    root_agent: BaseAgent = agents[root_id]
 
-    if not session_id or not instruction:
-        abort(400, description="Missing 'workflowId' or 'instruction' in request.")
+    edges = {e["source"]: e["target"] for e in canvas_cfg.get("edges", [])}
+    log_lines = []
 
-    session = get_session(session_id)
-    
-    if session.is_running():
-        abort(409, description="Session is already running. Please wait for the current task to complete.")
+    def run_node(node_id: str, incoming: str) -> str:
+        ag = agents[node_id]
+        out = ag.generate(incoming, vibe)
+        safe_name = f"{node_id}_{ag.role.replace(' ', '_')}.txt"
+        write_artifact(session_dir, safe_name, out)
+        log_lines.append(f"[{node_id} | {ag.role}] → {out[:120]}{'...' if len(out)>120 else ''}\n")
+        return out
 
-    # Run the instruction in a separate thread
-    thread = threading.Thread(target=session.run_instruction, args=(instruction,))
-    thread.start()
-    
-    print(f"🗣️ Kicking off instruction for session: {session_id}")
-    return jsonify({"success": True, "message": "Instruction received and is being processed."}), 202
+    context = vibe
+    current = root_id
+    visited = set()
 
+    while current and current not in visited:
+        visited.add(current)
+        context = run_node(current, context)
+        current = edges.get(current)
 
-@app.route('/api/status/<session_id>', methods=['GET'])
-def get_status(session_id):
-    """
-    Pollable endpoint for the frontend to get the latest status,
-    messages, and artifacts from a running session.
-    """
-    session = get_session(session_id)
-    
+    full_log = "\n".join(log_lines)
+    with open(os.path.join(staging_dir, "run.log"), "w", encoding="utf-8") as f:
+        f.write(full_log)
+
     return jsonify({
-        "sessionId": session.session_id,
-        "status": session.get_status(),
-        "messages": [msg.to_dict() for msg in session.get_messages()],
-        "artifacts": session.get_artifacts()
+        "session_id": session_id,
+        "preview_url": f"/output/{session_id}",
+        "download_zip": f"/zip/{session_id}"
     })
 
-@app.route('/api/artifacts/<session_id>/<path:filename>')
-def serve_artifact(session_id, filename):
-    """Serves a generated artifact file from a session's directory."""
-    session = get_session(session_id)
-    directory = session.artifact_path
-    print(f"Serving artifact: {filename} from {directory}")
-    return send_from_directory(directory, filename)
 
-@app.route('/api/artifacts/zip/<session_id>')
-def zip_artifacts(session_id):
-    """Creates a zip file of all artifacts for a session and sends it."""
-    session = get_session(session_id)
-    directory = session.artifact_path
-    
-    memory_file = io.BytesIO()
-    with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for filename in session.get_artifacts():
-            file_path = os.path.join(directory, filename)
-            if os.path.exists(file_path):
-                zf.write(file_path, arcname=filename)
-    
-    memory_file.seek(0)
-    
+# ----------------------------------------------------------------------
+# Serve the built React SPA (Vite output = ./build)
+# ----------------------------------------------------------------------
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def catch_all(path):
+    # Block known API routes – keep your existing endpoints safe
+    if path.startswith(("finalize", "output/", "zip/", "download/", "health")):
+        abort(404)
+
+    # Serve static files from ./build
+    build_path = os.path.join(app.static_folder, path)
+    if path and os.path.exists(build_path) and not os.path.isdir(build_path):
+        return send_from_directory(app.static_folder, path)
+
+    # SPA fallback
+    return send_from_directory(app.static_folder, "index.html")
+
+
+# ----------------------------------------------------------------------
+# Preview route – loads generated index.html inside an iframe
+# ----------------------------------------------------------------------
+@app.route("/output/<session_id>")
+def output(session_id):
+    session_dir = os.path.join(SESSIONS_ROOT, session_id)
+    index_path = os.path.join(session_dir, "artifacts", "index.html")
+    if not os.path.exists(index_path):
+        for f in os.listdir(os.path.join(session_dir, "artifacts")):
+            if f.endswith(".html"):
+                index_path = os.path.join(session_dir, "artifacts", f)
+                break
+        else:
+            return "No HTML generated yet.", 404
+
+    with open(index_path, "r", encoding="utf-8") as f:
+        html = f.read()
+    wrapper = f"""
+    <!DOCTYPE html>
+    <html><head><meta charset="utf-8"><title>Vibe Preview</title>
+    <style>body,html,iframe{{margin:0;height:100%;width:100%;border:none}}</style>
+    </head><body>
+    <iframe srcdoc="{html.replace('"', '&quot;')}" frameborder="0"></iframe>
+    </body></html>
+    """
+    return wrapper
+
+
+# ----------------------------------------------------------------------
+# Download a single file from staging/artifacts
+# ----------------------------------------------------------------------
+@app.route("/download/<session_id>/<path:filename>")
+def download_file(session_id, filename):
+    session_dir = os.path.join(SESSIONS_ROOT, session_id)
+    return send_from_directory(session_dir, filename, as_attachment=True)
+
+
+# ----------------------------------------------------------------------
+# Full session zip (artifacts + staging logs)
+# ----------------------------------------------------------------------
+@app.route("/zip/<session_id>")
+def zip_session(session_id):
+    session_dir = os.path.join(SESSIONS_ROOT, session_id)
+    if not os.path.isdir(session_dir):
+        abort(404)
+
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as z:
+        for root, _, files in os.walk(session_dir):
+            for f in files:
+                full = os.path.join(root, f)
+                arcname = os.path.relpath(full, session_dir)
+                z.write(full, arcname)
+    buffer.seek(0)
     return send_file(
-        memory_file,
-        download_name=f'vibe-artifacts-{session_id}.zip',
+        buffer,
+        mimetype="application/zip",
         as_attachment=True,
-        mimetype='application/zip'
+        download_name=f"vibe_session_{session_id}.zip",
     )
 
 
-# --- Frontend Serving ---
-# Serve React App
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def serve(path):
-    full_path = os.path.join(app.static_folder, path)
-    # Use isfile to prevent a 500 error if the path is a directory.
-    # os.path.exists returns True for directories, but send_from_directory
-    # raises an exception, which can crash the server or cause health check failures.
-    if path != "" and os.path.isfile(full_path):
-        return send_from_directory(app.static_folder, path)
-    else:
-        return send_from_directory(app.static_folder, 'index.html')
+# ----------------------------------------------------------------------
+# Health check
+# ----------------------------------------------------------------------
+@app.route("/health")
+def health():
+    return "OK"
 
-if __name__ == '__main__':
-    if not os.path.exists(app.config['ARTIFACT_FOLDER']):
-        os.makedirs(app.config['ARTIFACT_FOLDER'])
-    app.run(debug=True, port=5000)
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)
