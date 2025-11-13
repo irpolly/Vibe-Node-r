@@ -3,17 +3,13 @@ FROM node:20-slim AS builder
 
 WORKDIR /app
 
-# Freshen npm first—fixes scoped/ESM resolution quirks
-RUN npm install -g npm@latest
+# Nuke any BOM/encoding quirks pre-copy
+RUN npm install -g npm@latest  # Fresh parser
 
-# Copy package files and install
 COPY package*.json ./
-RUN npm install   # Clean install, dev deps for build
+RUN npm install --loglevel=error  # Suppress noise, but logs if fails
 
-# Copy source
 COPY . .
-
-# Build
 RUN npm run build
 
 # --- Stage 2: Python Backend ---
