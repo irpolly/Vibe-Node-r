@@ -3,11 +3,8 @@ FROM node:20-slim AS builder
 
 WORKDIR /app
 
-# Nuke any BOM/encoding quirks pre-copy
-RUN npm install -g npm@latest  # Fresh parser
-
 COPY package*.json ./
-RUN npm install --loglevel=error  # Suppress noise, but logs if fails
+RUN npm ci  # Switch to ci for lock-exact installs (faster, reproducible—fails if mismatch)
 
 COPY . .
 RUN npm run build
