@@ -20,7 +20,8 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      // Optional: Silence any module nags
+      build: {
+        outDir: 'build',
       onwarn(warning, warn) {
         if (warning.code === 'MODULE_LEVEL_DIRECTIVE') return;
         warn(warning);
