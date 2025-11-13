@@ -3,6 +3,9 @@ FROM node:20-slim AS builder
 
 WORKDIR /app
 
+# Freshen npm first—fixes scoped/ESM resolution quirks
+RUN npm install -g npm@latest
+
 # Copy package files and install
 COPY package*.json ./
 RUN npm install   # Clean install, dev deps for build
