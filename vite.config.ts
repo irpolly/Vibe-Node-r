@@ -1,22 +1,25 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import path from 'path'  // ADD THIS LINE
-import { fileURLToPath } from 'url'  // ADD THIS TOO (for __dirname in ESM)
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))  // ADD THIS
-
+// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  build: {
-    outDir: 'build',
-    rollupOptions: {
-      external: [],
-    },
-  },
   resolve: {
     alias: {
-      // Fixed: Now resolve is defined via path.resolve
-      '/index.tsx': path.resolve(__dirname, 'index.tsx'),
-    },
+      // Fix Rollup resolution for reactflow v11 ESM subpath imports
+      '@reactflow/core': 'reactflow/dist/core/index.esm.js',
+      '@reactflow/background': 'reactflow/dist/background/index.esm.js',
+      '@reactflow/controls': 'reactflow/dist/controls/index.esm.js',
+      '@reactflow/edges': 'reactflow/dist/edges/index.esm.js',
+      '@reactflow/minimap': 'reactflow/dist/minimap/index.esm.js',
+      '@reactflow/node-toolbar': 'reactflow/dist/nodeToolbar/index.esm.js',
+      '@reactflow/nodes': 'reactflow/dist/nodes/index.esm.js',
+      // Add more if your app uses extras (e.g., connection line)
+    }
   },
+  build: {
+    rollupOptions: {
+      // Optional: If ya wanna externalize somethin' else, but skip for now
+    }
+  }
 })
