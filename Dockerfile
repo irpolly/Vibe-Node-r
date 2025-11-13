@@ -3,12 +3,13 @@ FROM node:20-slim AS builder
 
 WORKDIR /app
 
+RUN npm install -g npm@11.6.2  # Bump to latest—nukes ancient lock woes
+
 COPY package*.json ./
-RUN npm ci  # Switch to ci for lock-exact installs (faster, reproducible—fails if mismatch)
+RUN npm ci  # Keep for speed/reproducibility; now sync-safe
 
 COPY . .
 RUN npm run build
-
 # --- Stage 2: Python Backend ---
 FROM python:3.11-slim
 
