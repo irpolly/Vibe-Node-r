@@ -10,16 +10,12 @@ from flask import (
     Flask, request, jsonify, send_file,
     send_from_directory, abort
 )
-from google.cloud import storage
 from agents import create_agents, BaseAgent
 
 # ----------------------------------------------------------------------
 # Flask + static build folder
 # ----------------------------------------------------------------------
 app = Flask(__name__, static_folder="build", static_url_path="/")
-@app.route('/<path:path>')
-def serve(path):
-    return send_from_directory(app.static_folder, path) if path else send_from_directory(app.static_folder, 'index.html')
 SESSIONS_ROOT = "sessions"
 os.makedirs(SESSIONS_ROOT, exist_ok=True)
 
@@ -106,31 +102,6 @@ def finalize():
 
 
 # ----------------------------------------------------------------------
-# Serve the built React SPA (Vite output = ./build)
-# ----------------------------------------------------------------------
-@app.route("/", defaults={"path": ""})
-@app.route("/<path:path>")
-def catch_all(path):
-    # Block known API routes – keep your existing endpoints safe
-    if path.startswith(("finalize", "output/", "zip/", "download/", "health")):
-        abort(404)
-    if path != "":
-        try:
-            return send_from_directory(app.static_folder, path)
-        except FileNotFoundError:
-            pass  # Fall through to index.html
-    return send_from_directory(app.static_folder, "index.html")
-
-    # Serve static files from ./build
-    build_path = os.path.join(app.static_folder, path)
-    if path and os.path.exists(build_path) and not os.path.isdir(build_path):
-        return send_from_directory(app.static_folder, path)
-
-    # SPA fallback
-    return send_from_directory(app.static_folder, "index.html")
-
-
-# ----------------------------------------------------------------------
 # Preview route – loads generated index.html inside an iframe
 # ----------------------------------------------------------------------
 @app.route("/output/<session_id>")
@@ -198,6 +169,20 @@ def zip_session(session_id):
 @app.route("/health")
 def health():
     return "OK"
+
+
+# ----------------------------------------------------------------------
+# Serve the built React SPA (must be last!)
+# ----------------------------------------------------------------------
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def catch_all(path):
+    if path != "":
+        try:
+            return send_from_directory(app.static_folder, path)
+        except FileNotFoundError:
+            pass  # Fall through to index.html
+    return send_from_directory(app.static_folder, "index.html")
 
 
 if __name__ == "__main__":
