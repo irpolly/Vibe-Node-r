@@ -1,28 +1,46 @@
-// lib/utils.ts (full file with patch—keep your existing exports)
-import { clsx } from 'clsx';
-import { type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-import { NodeData } from '../types.ts';  // Add if needed for types
 
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+import React from 'react';
+import { Node } from 'reactflow';
+import { NodeData, SerializedNodeData } from '../types.ts';
+import { AGENT_TEMPLATES, TriggerIcon, ToolIcon, CheckeredFlagIcon } from '../constants.tsx';
 
-// Your other utils: generateId, isValidConnection, etc.
-// ...
+/**
+ * Reconstructs node data with React component icons after being loaded from serialization.
+ * @param nodes An array of nodes, where the `data.icon` property is missing.
+ * @returns An array of nodes with the `data.icon` property restored.
+ */
+export const reconstructNodeIcons = (nodes: Node<SerializedNodeData>[]): Node<NodeData>[] => {
+  return nodes.map(node => {
+    let icon: React.ReactNode;
 
-// ADD THIS FUNCTION (or tweak if it exists elsewhere)
-export function reconstructNodeIcons(nodes: NodeData[]): NodeData[] {
-  return nodes.map(node => ({
-    ...node,
-    data: {
-      ...node.data,
-      icon: node.data.icon || generateSvg(node.type),  // Fallback to SVG gen if missin'
-      // Add any icon recon logic: e.g., resize, colorize based on type
-      // If deprecated, stub as: return nodes; // Or migrate to svgGenerator
-    },
-  }));
-}
+    // Determine the node type based on the `type` property of the React Flow node object
+    const nodeType = node.type;
 
-// If it's async or needs more (e.g., for persistent storage):
-// export async function reconstructNodeIcons(nodes: NodeData[]): Promise<NodeData[]> { ... }
+    switch (nodeType) {
+      case 'agentNode':
+        const key = node.data.templateKey;
+        icon = key && AGENT_TEMPLATES[key] ? AGENT_TEMPLATES[key].icon : React.createElement('div', null);
+        break;
+      case 'triggerNode':
+        icon = React.createElement(TriggerIcon, { className: "w-8 h-8 text-amber-400" });
+        break;
+      case 'toolNode':
+        if (node.data.label === 'Code Generator') {
+          icon = React.createElement(CheckeredFlagIcon, { className: "w-6 h-6" });
+        } else {
+          icon = React.createElement(ToolIcon, { className: "w-6 h-6" });
+        }
+        break;
+      default:
+        icon = React.createElement('div', null); // Fallback for unknown node types
+    }
+
+    return {
+      ...node,
+      data: {
+        ...node.data,
+        icon: icon,
+      },
+    } as Node<NodeData>;
+  });
+};
