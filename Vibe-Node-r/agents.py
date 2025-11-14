@@ -1,15 +1,24 @@
-# agents.py
+# agents.py (improved)
 import asyncio
 import json
-from typing import TYPE_CHECKING, Dict, Any
+from typing import TYPE_CHECKING, Dict, Any, List
 
-from vertexai.generative_models import GenerativeModel
+# --- Vertex AI (unchanged) ---
+try:
+    from vertexai.generative_models import GenerativeModel
+    import vertexai
+    VERTEX_AVAILABLE = True
+except Exception as e:
+    print(f"Vertex AI import failed: {e}")
+    VERTEX_AVAILABLE = False
+    GenerativeModel = None
+    vertexai = None
 
 if TYPE_CHECKING:
     from session import Session
 
 # ---------------------------------------------------------------------------
-# Helper – CSS-styled “speak”
+# Helper – CSS-styled “speak” (restored from old for UI chat bubbles)
 # ---------------------------------------------------------------------------
 def _css_speak(role: str, text: str) -> str:
     """
@@ -26,9 +35,11 @@ def _css_speak(role: str, text: str) -> str:
     bg = color_map.get(role, "bg-gray-600 text-white")
     return f'<div class="inline-block px-3 py-1.5 rounded-lg {bg} text-sm font-medium">{text}</div>'
 
-# ---------------------------------------------------------------------------
-# Base Agent
-# ---------------------------------------------------------------------------
+def _clean_json(raw: str) -> str:
+    if raw.startswith("```json"): raw = raw[7:]
+    if raw.endswith("```"): raw = raw[:-3]
+    return raw.strip()
+
 class Agent:
     def __init__(self, node_id: str, config: Dict[str, Any], session: 'Session'):
         self.node_id = node_id
@@ -40,59 +51,88 @@ class Agent:
         await asyncio.sleep(duration_s)
 
     # ------------------------------------------------------------------- #
-    # NEW: speak → CSS-styled HTML
+    # speak → CSS-styled HTML (restored from old)
     # ------------------------------------------------------------------- #
     def speak(self, text: str):
         html = _css_speak(self.role, text)
         print(f"[{self.role}]: {text}")               # keep console log
         self.session.add_message(self.role, html)     # UI receives HTML
 
-    async def generate_response(self, prompt: str) -> str:
+    async def generate(self, prompt: str) -> str:
+        if not VERTEX_AVAILABLE:
+            return "Vertex AI not available."
         try:
-            model_name = self.config.get("llm", "gemini-2.5-flash")
-            system_instruction = (
-                f"You are an AI agent acting as a {self.role} in a team. "
-                "Be professional but concise. Answer in 1-2 sentences."
-            )
-            model = GenerativeModel(model_name, system_instruction=system_instruction)
-            response = await model.generate_content_async(prompt)
-            return response.text.strip()
+            model_name = self.config.get("llm", "gemini-1.5-flash")
+            system = f"You are a professional {self.role}. Be concise but detailed. Focus on creating a playable HTML5 game."
+            model = GenerativeModel(model_name, system_instruction=system)
+            resp = await model.generate_content_async(prompt)
+            return resp.text.strip()
         except Exception as e:
             err = f"Gemini error: {e}"
-            print(f"Error for {self.role}: {err}")
-            return f"I hit an API problem – see server logs. ({e})"
+            print(err)
+            return err
 
-    async def run(self, prompt: str, instructions: str | None = None):
+    async def run(self, vibe: str, instructions: str | None = None):
         raise NotImplementedError
 
 # ---------------------------------------------------------------------------
-# ManagerAgent – orchestrates phases (same logic, CSS speak)
+# Export create_agents for main.py (from new)
+# ---------------------------------------------------------------------------
+def create_agents(canvas_cfg: Dict[str, Any]) -> Dict[str, "Agent"]:
+    import importlib
+    agents_mod = importlib.import_module('agents')
+    agents: Dict[str, "Agent"] = {}
+
+    for node in canvas_cfg.get('nodes', []):
+        if node.get('type') != 'agentNode':
+            continue
+        label = node['data']['label']
+        class_name = Session.AGENT_MAP.get(label)
+        if not class_name:
+            continue
+        cls = getattr(agents_mod, class_name, Agent)
+        agents[node['id']] = cls(
+            node_id=node['id'],
+            config=node['data'].get('config', {}),
+            session=None  # Injected later
+        )
+    return agents
+
+# ---------------------------------------------------------------------------
+# ManagerAgent (merge: restore phases/loop from old, keep simplified run from new)
 # ---------------------------------------------------------------------------
 class ManagerAgent(Agent):
     async def run(self, vibe: str, instructions: str | None = None):
         self.speak(f"Starting project for vibe: “{vibe}”")
         await self.think(1)
 
-        writer   = next((a for a in self.session.agents.values() if isinstance(a, WriterAgent)), None)
-        designer = next((a for a in self.session.agents.values() if isinstance(a, DesignerAgent)), None)
-        coder    = next((a for a in self.session.agents.values() if isinstance(a, CoderAgent)), None)
-        tester   = next((a for a in self.session.agents.values() if isinstance(a, TesterAgent)), None)
+        writer   = self._find(WriterAgent)
+        designer = self._find(DesignerAgent)
+        coder    = self._find(CoderAgent)
+        tester   = self._find(TesterAgent)
 
         if not coder:
             raise Exception("Coder Agent is required – aborting workflow.")
 
-        # ---- Phase 1: Ideation ------------------------------------------------
+        # ---- Phase 1: Ideation (Writer & Designer) ----
         self.speak("Phase 1 – Ideation: Writer & Designer")
+        plan = ""
+        assets = {}
         if writer:
-            await writer.run(f"Write a short backstory & cut-scenes for vibe: “{vibe}”", instructions)
+            plan = await writer.run(vibe, instructions)
+            self.session.add_artifact("PLAN.md", plan)
         if designer:
-            await designer.run(f"Design visual concepts for vibe: “{vibe}”", instructions)
+            assets = await designer.run(vibe, plan, instructions)
+            for name, content in assets.items():
+                self.session.add_artifact(name, content)
 
-        # ---- Phase 2: Initial Code --------------------------------------------
+        # ---- Phase 2: Initial Code ----
         self.speak("Phase 2 – Initial code generation")
-        await coder.run_finalization(vibe, instructions)
+        files = await coder.run(vibe, plan, assets, instructions)
+        for name, content in files.items():
+            self.session.add_artifact(name, content)
 
-        # ---- Phase 3: Test-Fix Loop (max 2 retries) ---------------------------
+        # ---- Phase 3: Test-Fix Loop (restored from old, max 2 retries) ----
         max_retries = 2
         for attempt in range(1, max_retries + 1):
             if not tester:
@@ -100,7 +140,7 @@ class ManagerAgent(Agent):
                 break
 
             self.speak(f"Phase 3 – QA round {attempt}/{max_retries}")
-            verdict = await tester.run("Review current artifacts and return [PASS] or [BUG]…", instructions)
+            verdict = await tester.run(self.session.get_artifacts(), self.session)
 
             if verdict.strip().startswith("[PASS]"):
                 self.speak("Tester passed – build is good.")
@@ -108,28 +148,73 @@ class ManagerAgent(Agent):
 
             bug = verdict.replace("[BUG]", "", 1).strip()
             self.speak(f"Tester reported bug: {bug}")
-            await coder.run_iteration(f"Fix the following bug: {bug}", vibe)
+            fixes = await coder.run_iteration(bug, vibe, plan, assets)
+            for name, content in fixes.items():
+                self.session.add_artifact(name, content)
 
             if attempt == max_retries:
                 self.speak("Max QA retries reached – finalising anyway.")
 
         self.speak("Workflow complete – artifacts ready for preview/download.")
 
-    async def run_instruction(self, instruction: str):
+    async def run_instruction(self, instruction: str):  # Restored from old for iterations
         self.speak(f"New user instruction: “{instruction}”")
-        coder = next((a for a in self.session.agents.values() if isinstance(a, CoderAgent)), None)
+        coder = self._find(CoderAgent)
         if coder:
-            await coder.run_iteration(instruction, "user-directed change")
+            plan = self.session.get_artifact_content("PLAN.md") or ""
+            assets = {f: self.session.get_artifact_content(f) for f in self.session.get_artifacts() if f != "PLAN.md"}
+            fixes = await coder.run_iteration(instruction, "", plan, assets)  # Vibe not needed for instruct
+            for name, content in fixes.items():
+                self.session.add_artifact(name, content)
         else:
             self.speak("No Coder Agent found to apply the instruction.")
 
+    def _find(self, cls):
+        return next((a for a in self.session.agents.values() if isinstance(a, cls)), None)
+
 # ---------------------------------------------------------------------------
-# CoderAgent – JSON file generation (CSS speak)
+# WriterAgent (improved prompt for better narratives)
+# ---------------------------------------------------------------------------
+class WriterAgent(Agent):
+    async def run(self, vibe: str, instructions: str | None = None):
+        extra = f" Also consider: {instructions}" if instructions else ""
+        prompt = f"""
+        You are the Writer. Write a short backstory, core mechanics, and cut-scenes for vibe: “{vibe}”{extra}.
+        Use [sound cue] for audio. Be concise: 1-2 paragraphs for backstory, bullet points for mechanics.
+        """
+        story = await self.generate(prompt)
+        self.speak(story)
+        return story
+
+# ---------------------------------------------------------------------------
+# DesignerAgent (from new, but restore text output + JSON)
+# ---------------------------------------------------------------------------
+class DesignerAgent(Agent):
+    async def run(self, vibe: str, plan: str, instructions: str | None = None):
+        extra = f" Also: {instructions}" if instructions else ""
+        prompt = f"""
+        Design visual concepts for vibe: “{vibe}”{extra}. Based on plan: {plan}.
+        List assets (sprites, backgrounds, UI). Mention Phaser for integration, Howler for sound.
+        Return JSON: {{"asset_name.png": "description", ...}}
+        """
+        assets_text = await self.generate(prompt)
+        self.speak(assets_text)
+
+        raw = _clean_json(assets_text)
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            data = {"error.txt": "Designer failed to return valid JSON."}
+        assets = {name: f"# Placeholder for {desc}" for name, desc in data.items()}
+        return assets
+
+# ---------------------------------------------------------------------------
+# CoderAgent (from new, keep Phaser; restore JSON gen from old)
 # ---------------------------------------------------------------------------
 class CoderAgent(Agent):
-    async def _gemini_json(self, prompt: str) -> Dict[str, str]:
+    async def _gemini_json(self, prompt: str) -> Dict[str, str]:  # Restored from old for JSON output
         try:
-            model_name = self.config.get("llm", "gemini-2.5-flash")
+            model_name = self.config.get("llm", "gemini-1.5-flash")
             system = (
                 "You are a Coder Agent. Return **only** a JSON object where each key is a filename "
                 "and each value is the complete file content. No markdown fences, no explanations."
@@ -139,115 +224,71 @@ class CoderAgent(Agent):
             generation_config = {
                 "response_mime_type": "application/json",
                 "max_output_tokens": 16384,
-                "thinking_config": {"thinking_budget": 8192}
             }
 
             response = await model.generate_content_async(prompt, generation_config=generation_config)
-            raw = response.text.strip()
-            if raw.startswith("```json"): raw = raw[7:]
-            if raw.endswith("```"): raw = raw[:-3]
+            raw = _clean_json(response.text.strip())
             return json.loads(raw)
         except Exception as e:
-            html = f"""
-            <html><head><title>Coder Error</title></head>
-            <body style="font-family:monospace;background:#111;color:#f00;">
-            <h1>Coder Agent Failure</h1><pre>{e}</pre>
-            </body></html>
-            """
+            html = f"<html><body><h1>Coder Error</h1><pre>{e}</pre></body></html>"
             return {"error.html": html}
 
-    async def run_finalization(self, vibe: str, instructions: str | None = None):
+    async def run(self, vibe: str, plan: str, assets: Dict[str, str], instructions: str | None = None):
+        asset_list = "\n".join(f"- {k}: {v.splitlines()[0] if v else ''}" for k, v in assets.items())
         instr = f" Also apply: {instructions}" if instructions else ""
         prompt = (
-            f"Generate a **complete, playable web game** for the vibe “{vibe}”{instr}. "
-            "Return a JSON object with filenames (e.g., index.html, style.css, game.js) "
-            "and their full source code. Use Kaboom.js / Phaser for game logic, "
-            "GSAP for UI animations, Howler.js for audio."
+            f"Generate a **complete, playable Phaser 3 web game** for vibe “{vibe}”{instr}. "
+            f"Plan: {plan}. Assets: {asset_list}. "
+            "Return JSON with filenames (index.html, game.js, etc.) and full code. Load Phaser from CDN."
         )
         files = await self._gemini_json(prompt)
-        for name, content in files.items():
-            self.session.add_artifact(name, content)
-        self.speak(f"Initial code generation finished – {len(files)} file(s) saved.")
+        return files
 
-    async def run_iteration(self, instruction: str, original_vibe: str):
-        current = {
-            f: self.session.get_artifact_content(f)
-            for f in self.session.get_artifacts()
-            if self.session.get_artifact_content(f)
-        }
-        context = "\n".join([f"--- {fn} ---\n{c}\n" for fn, c in current.items()])
-
+    async def run_iteration(self, instruction: str, vibe: str, plan: str, assets: Dict[str, str]):
+        current_files = {f: self.session.get_artifact_content(f) for f in self.session.get_artifacts()}
+        context = "\n".join([f"--- {fn} ---\n{c}\n" for fn, c in current_files.items()])
         prompt = (
-            f"Current project files:\n{context}\n\n"
-            f"Original vibe: “{original_vibe}”\n"
-            f"Apply the following change: {instruction}\n"
-            "Return a **new JSON object** containing **only the files that changed**."
+            f"Current files:\n{context}\n\n"
+            f"Original vibe: “{vibe}” Plan: {plan}\n"
+            f"Apply change/fix: {instruction}\n"
+            "Return JSON with **only changed files**."
         )
         updated = await self._gemini_json(prompt)
-        for name, content in updated.items():
-            self.session.add_artifact(name, content)
-        self.speak(f"Applied instruction – updated {len(updated)} file(s).")
+        return updated
 
 # ---------------------------------------------------------------------------
-# DesignerAgent – CSS speak
-# ---------------------------------------------------------------------------
-class DesignerAgent(Agent):
-    async def run(self, prompt: str, instructions: str | None = None):
-        extra = f" Also: {instructions}" if instructions else ""
-        plan = await self.generate_response(f"Design visual assets for vibe: “{prompt}”{extra}")
-        self.speak(plan)
-
-        assets_prompt = (
-            f"List every visual asset you would create for the game described above. "
-            "Include sprites, backgrounds, UI elements, particle effects, etc. "
-            "Mention libraries (Kaboom, Phaser, GSAP) and sound cues (Howler). "
-            "End with: “Sending asset list to Coder.”"
-        )
-        assets = await self.generate_response(assets_prompt)
-        self.speak(assets)
-
-# ---------------------------------------------------------------------------
-# TesterAgent – CSS speak, returns [PASS]/[BUG]
+# TesterAgent (restore LLM from old, keep file checks from new as pre-LLM)
 # ---------------------------------------------------------------------------
 class TesterAgent(Agent):
-    async def run(self, prompt: str, instructions: str | None = None) -> str:
+    async def run(self, artifact_names: List[str], session: "Session") -> str:
         files = {
-            f: self.session.get_artifact_content(f)
-            for f in self.session.get_artifacts()
-            if self.session.get_artifact_content(f)
+            f: session.get_artifact_content(f)
+            for f in artifact_names
+            if session.get_artifact_content(f)
         }
         if not files:
             verdict = "[BUG] No artifacts found – Coder must generate files first."
             self.speak(verdict)
             return verdict
 
+        # Pre-LLM basic checks (from new)
+        if "index.html" not in files:
+            return "[BUG] Missing index.html"
+        js_files = [f for f in files if f.endswith(".js")]
+        html = files["index.html"]
+        missing_refs = [f for f in js_files if f not in html]
+        if missing_refs:
+            return f"[BUG] index.html does not reference: {', '.join(missing_refs)}"
+
+        # LLM review (restored from old)
         code_block = "\n".join([f"--- {fn} ---\n{c}\n" for fn, c in files.items()])
-        history = "\n".join([f"{m.agent_name}: {m.text}" for m in self.session.messages])
-
+        history = "\n".join([f"{m.agent_name}: {m.text}" for m in session.messages])
         tester_prompt = f"""
-        You are a QA Tester. Review the project history and current code.
-
-        History:
-        {history}
-
-        Current files:
-        {code_block}
-
-        Respond **exactly** with:
-        - `[PASS]` + short confirmation **or**
-        - `[BUG]` + concise, actionable bug report for the Coder.
+        You are a QA Tester. Review history and code for playability, bugs, vibe alignment.
+        History: {history}
+        Code: {code_block}
+        Respond with [PASS] + confirmation OR [BUG] + actionable report.
         """
-        verdict = await self.generate_response(tester_prompt)
+        verdict = await self.generate(tester_prompt)
         self.speak(verdict)
         return verdict
-
-# ---------------------------------------------------------------------------
-# WriterAgent – CSS speak
-# ---------------------------------------------------------------------------
-class WriterAgent(Agent):
-    async def run(self, prompt: str, instructions: str | None = None):
-        extra = f" Also consider: {instructions}" if instructions else ""
-        full = f"{prompt}{extra} Write a short backstory and opening/closing cut-scenes. "
-        full += "Use [sound cue] notation so the Coder can implement audio."
-        story = await self.generate_response(full)
-        self.speak(story)
