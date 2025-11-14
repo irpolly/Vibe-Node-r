@@ -1,7 +1,6 @@
 
 import os
 import time
-from agents import ManagerAgent, CoderAgent, DesignerAgent, TesterAgent, WriterAgent, Agent
 from typing import List, Dict, Any
 import asyncio
 
@@ -22,41 +21,30 @@ class Message:
 
 # --- Session Class ---
 class Session:
-    """
-    Manages a single workflow execution, including its state, agents,
-    and generated artifacts. Acts as a virtual environment.
-    """
     AGENT_MAP = {
-        "Coder Agent": CoderAgent,
-        "Designer Agent": DesignerAgent,
-        "Tester Agent": TesterAgent,
-        "Writer Agent": WriterAgent,
-        "Manager Agent": ManagerAgent,
+        "Coder Agent": "CoderAgent",      # store *names* only
+        "Designer Agent": "DesignerAgent",
+        "Tester Agent": "TesterAgent",
+        "Writer Agent": "WriterAgent",
+        "Manager Agent": "ManagerAgent",
     }
 
-    def __init__(self, session_id: str, workflow_data: Dict[str, Any], artifact_path: str):
-        self.session_id = session_id
-        self.artifact_path = artifact_path
-        self.status = "PENDING"  # PENDING -> RUNNING -> COMPLETED -> FAILED
-        self.messages: List[Message] = []
-        self.artifacts: List[str] = []
-        self.agents: Dict[str, Agent] = {}
-        self.root_agent_id: str | None = None
-        
-        os.makedirs(self.artifact_path, exist_ok=True)
-        self._prepare_agents(workflow_data)
-
     def _prepare_agents(self, workflow_data: Dict[str, Any]):
-        """Parses workflow data and instantiates agent objects."""
         nodes = workflow_data.get('nodes', [])
         edges = workflow_data.get('edges', [])
 
-        # 1. Instantiate all agents
+        # Dynamically resolve concrete classes at runtime
+        import importlib
+        agents_mod = importlib.import_module('agents')
+
         for node in nodes:
             if node.get('type') == 'agentNode':
-                agent_label = node['data']['label']
-                agent_class = self.AGENT_MAP.get(agent_label, ManagerAgent) # Default to Manager
-                self.agents[node['id']] = agent_class(
+                label = node['data']['label']
+                class_name = self.AGENT_MAP.get(label)
+                if not class_name:
+                    continue
+                agent_cls = getattr(agents_mod, class_name, Agent)  # fallback
+                self.agents[node['id']] = agent_cls(
                     node_id=node['id'],
                     config=node['data'].get('config', {}),
                     session=self

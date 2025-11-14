@@ -8,7 +8,7 @@ from typing import (Dict, List, Any, Optional)
 from datetime import datetime
 from flask import (Flask, request, jsonify, send_file, send_from_directory, abort)
 from flask_cors import CORS
-from agents import (create_agents, BaseAgent)
+from agents import (create_agents, Agent)
 
 # ----------------------------------------------------------------------
 # Flask + static build folder
@@ -29,25 +29,27 @@ SESSIONS_ROOT = "sessions"
 os.makedirs(SESSIONS_ROOT, exist_ok=True)
 
 # ----------------------------------------------------------------------
-# Helper: write artifact (text or base64 media)
+# Helper: create agents from canvas config (mirrors Session logic)
 # ----------------------------------------------------------------------
-def write_artifact(session_dir: str, filename: str, content: str):
-    path = os.path.join(session_dir, "artifacts", filename)
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+def create_agents(canvas_cfg: Dict[str, Any]) -> Dict[str, Agent]:
+    import importlib
+    agents_mod = importlib.import_module('agents')
+    agents: Dict[str, Agent] = {}
 
-    if content.strip().startswith("data:"):
-        header, b64 = content.split(",", 1)
-        raw = base64.b64decode(b64)
-        ext = header.split(";")[0].split("/")[-1]
-        final_path = os.path.splitext(path)[0] + f".{ext}"
-        with open(final_path, "wb") as f:
-            f.write(raw)
-        return final_path
-    else:
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(content)
-        return path
-
+    for node in canvas_cfg.get('nodes', []):
+        if node.get('type') != 'agentNode':
+            continue
+        label = node['data']['label']
+        class_name = Session.AGENT_MAP.get(label)   # reuse mapping
+        if not class_name:
+            continue
+        cls = getattr(agents_mod, class_name, Agent)
+        agents[node['id']] = cls(
+            node_id=node['id'],
+            config=node['data'].get('config', {}),
+            session=None   # session will be injected later
+        )
+    return agents
 
 # ----------------------------------------------------------------------
 # /finalize – receives canvas + vibe → creates ADK root_agent & runs

@@ -1,10 +1,9 @@
-# agents.py
 import asyncio
 import json
 import os
 from typing import TYPE_CHECKING, Dict, Any, List
 
-
+# --- Vertex AI (unchanged) ---
 try:
     from vertexai.generative_models import GenerativeModel
     import vertexai
@@ -15,18 +14,9 @@ except Exception as e:
     GenerativeModel = None
     vertexai = None
 
+# TYPE-CHECKING ONLY – safe for circular refs
 if TYPE_CHECKING:
-    from session import Session
-
-
-def _clean_json(text: str) -> str:
-    """Strip markdown fences if present."""
-    if text.startswith("```json"):
-        text = text[7:]
-    if text.endswith("```"):
-        text = text[:-3]
-    return text.strip()
-
+    from session import Session 
 
 class Agent:
     def __init__(self, node_id: str, config: Dict[str, Any], session: "Session"):
@@ -125,18 +115,18 @@ class ManagerAgent(Agent):
 class WriterAgent(Agent):
     async def run(self, vibe: str, instructions: str | None):
         prompt = f"""
-You are the Writer. Produce a concise design plan for a **single-player** HTML5 game based on the vibe below.
-Include:
-* Game title
-* Core loop
-* Win / lose conditions
-* List of required assets (images, sounds)
-* List of source files the Coder must create
-* Short narrative script (intro / win / lose)
+        You are the Writer. Produce a concise design plan for a **single-player** HTML5 game based on the vibe below.
+        Include:
+        * Game title
+        * Core loop
+        * Win / lose conditions
+        * List of required assets (images, sounds)
+        * List of source files the Coder must create
+        * Short narrative script (intro / win / lose)
 
-Vibe: {vibe}
-{instructions or ""}
-"""
+        Vibe: {vibe}
+        {instructions or ""}
+        """
         plan = await self.generate(prompt)
         self.speak("Design plan ready.")
         return plan
@@ -151,15 +141,15 @@ Vibe: {vibe}
 class DesignerAgent(Agent):
     async def run(self, vibe: str, plan: str, instructions: str | None, *_):
         prompt = f"""
-You are the Designer. Using the plan below, list **every visual / audio asset** the game needs.
-Return a JSON object where each key is the filename (e.g. "player.png") and the value is a
-short description of the asset.
+        You are the Designer. Using the plan below, list **every visual / audio asset** the game needs.
+        Return a JSON object where each key is the filename (e.g. "player.png") and the value is a
+        short description of the asset.
 
-Plan:
-{plan}
+        Plan:
+        {plan}
 
-{instructions or ""}
-"""
+        {instructions or ""}
+        """
         raw = await self.generate(prompt)
         raw = _clean_json(raw)
         try:
@@ -185,22 +175,22 @@ class CoderAgent(Agent):
     async def run(self, vibe: str, plan: str, assets: Dict[str, str], instructions: str | None):
         asset_list = "\n".join(f"- {k}: {v.splitlines()[1] if v else ''}".strip() for k, v in assets.items())
         prompt = f"""
-You are the Coder. Implement the game as described in the plan.
-Use **Phaser 3** (load from CDN).  Do **not** use Kaboom.
+        You are the Coder. Implement the game as described in the plan.
+        Use **Phaser 3** (load from CDN).  Do **not** use Kaboom.
 
-Plan:
-{plan}
+        Plan:
+        {plan}
 
-Required assets:
-{asset_list}
+        Required assets:
+        {asset_list}
 
-Return a JSON object:
-{{
-  "index.html": "...",
-  "game.js": "...",
-  "style.css": "...",
-  ... any other files ...
-}}
+        Return a JSON object:
+        {{
+          "index.html": "...",
+      "game.js": "...",
+      "style.css": "...",
+      ... any other files ...
+    }}
 
 {instructions or ""}
 """
@@ -217,18 +207,18 @@ Return a JSON object:
     async def run_iteration(self, bug: str, vibe: str, plan: str, assets: Dict[str, str]):
         asset_list = "\n".join(f"- {k}" for k in assets)
         prompt = f"""
-Coder, the Tester (or user) reported:
+        Coder, the Tester (or user) reported:
 
-{bug}
+        {bug}
 
-Current plan:
-{plan}
+        Current plan:
+        {plan}
 
-Current asset list:
-{asset_list}
+        Current asset list:
+        {asset_list}
 
-Fix the code and return **only the changed files** as JSON.
-"""
+        Fix the code and return **only the changed files** as JSON.
+        """
         raw = await self.generate(prompt)
         raw = _clean_json(raw)
         try:
