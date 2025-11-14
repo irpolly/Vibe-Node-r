@@ -6,16 +6,25 @@ import zipfile
 from io import BytesIO
 from typing import (Dict, List, Any, Optional)
 from datetime import datetime
-from flask import (
-    Flask, request, jsonify, send_file,
-    send_from_directory, abort
-)
-from agents import create_agents, BaseAgent
+from flask import (Flask, request, jsonify, send_file, send_from_directory, abort)
+from flask_cors import CORS
+from agents import (create_agents, BaseAgent)
 
 # ----------------------------------------------------------------------
 # Flask + static build folder
 # ----------------------------------------------------------------------
-app = Flask(__name__, static_folder="build", static_url_path="/")
+app = Flask(__name__, static_folder='build', static_url_path='/')
+CORS(app)
+
+# === VERTEX AI SETUP ===
+if 'agents' in globals():
+    try:
+        import vertexai
+        from vertexai.generative_models import GenerativeModel
+        vertexai.init(project="cloud-run-hackathon-477510", location="europe-west4")
+        print("Vertex AI initialized")
+    except Exception as e:
+        print(f"Vertex AI init failed: {e}")
 SESSIONS_ROOT = "sessions"
 os.makedirs(SESSIONS_ROOT, exist_ok=True)
 

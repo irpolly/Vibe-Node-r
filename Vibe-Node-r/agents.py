@@ -5,7 +5,15 @@ import os
 from typing import TYPE_CHECKING, Dict, Any, List
 from session import Session
 
-from vertexai.generative_models import GenerativeModel
+try:
+    from vertexai.generative_models import GenerativeModel
+    import vertexai
+    VERTEX_AVAILABLE = True
+except Exception as e:
+    print(f"Vertex AI import failed: {e}")
+    VERTEX_AVAILABLE = False
+    GenerativeModel = None
+    vertexai = None
 
 if TYPE_CHECKING:
     from session import Session
