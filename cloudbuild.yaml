@@ -1,0 +1,28 @@
+
+# This file provides explicit instructions for Google Cloud Build.
+# It's used when you trigger a build from a Git repository via the Cloud Run UI.
+
+steps:
+  # Step 1: Build the container image from the 'backend' subdirectory
+  - name: 'gcr.io/cloud-builders/docker'
+    # This is the crucial instruction: change the working directory
+    # to where the Dockerfile is located before running the build.
+    dir: 'Vibe-Node-r'
+    args:
+      - 'build'
+      - '-t'
+      - 'europe-west4-docker.pkg.dev/${PROJECT_ID}/vibe-coder-repo/vibe-node-r-backend:latest'
+      - '.'
+    id: 'Build'
+
+  # Step 2: Push the container image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'europe-west4-docker.pkg.dev/${PROJECT_ID}/vibe-coder-repo/vibe-node-r-backend:latest'
+    id: 'Push'
+
+# Define the final image that was built.
+# This is what Cloud Run will use to deploy.
+images:
+  - 'europe-west4-docker.pkg.dev/${PROJECT_ID}/vibe-coder-repo/vibe-node-r-backend:latest'
