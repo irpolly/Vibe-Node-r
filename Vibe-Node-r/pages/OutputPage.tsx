@@ -111,6 +111,7 @@ const OutputPage: React.FC<OutputPageProps> = ({ onBack, workflowId }) => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [agentMessages]);
 
+  // Cleanup polling on component unmount
   useEffect(() => {
     return () => {
       if (pollingIntervalRef.current) {
