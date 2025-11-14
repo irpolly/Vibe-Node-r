@@ -334,7 +334,7 @@ const OutputPage: React.FC<OutputPageProps> = ({ onBack, workflowId }) => {
                       <span className={`font-bold ${msg.agent.color}`}>{msg.agent.name}</span>
                       <span className="text-xs text-gray-500">{msg.timestamp}</span>
                     </div>
-                    <p className="text-gray-200 whitespace-pre-wrap">{msg.text}</p>
+                    <p className="text-gray-200 whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: msg.text }} />
                   </div>
                 </div>
               ))}
