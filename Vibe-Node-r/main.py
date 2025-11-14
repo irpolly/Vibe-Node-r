@@ -4,6 +4,7 @@ import json
 import base64
 import zipfile
 from io import BytesIO
+from typing import (Dict, List, Any, Optional)
 from datetime import datetime
 from flask import (
     Flask, request, jsonify, send_file,
@@ -16,6 +17,9 @@ from agents import create_agents, BaseAgent
 # Flask + static build folder
 # ----------------------------------------------------------------------
 app = Flask(__name__, static_folder="build", static_url_path="/")
+@app.route('/<path:path>')
+def serve(path):
+    return send_from_directory(app.static_folder, path) if path else send_from_directory(app.static_folder, 'index.html')
 SESSIONS_ROOT = "sessions"
 os.makedirs(SESSIONS_ROOT, exist_ok=True)
 
@@ -110,6 +114,12 @@ def catch_all(path):
     # Block known API routes – keep your existing endpoints safe
     if path.startswith(("finalize", "output/", "zip/", "download/", "health")):
         abort(404)
+    if path != "":
+        try:
+            return send_from_directory(app.static_folder, path)
+        except FileNotFoundError:
+            pass  # Fall through to index.html
+    return send_from_directory(app.static_folder, "index.html")
 
     # Serve static files from ./build
     build_path = os.path.join(app.static_folder, path)
