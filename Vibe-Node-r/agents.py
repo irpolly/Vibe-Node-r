@@ -3,7 +3,7 @@ import asyncio
 import json
 import os
 from typing import TYPE_CHECKING, Dict, Any, List
-from session import Session
+
 
 try:
     from vertexai.generative_models import GenerativeModel
