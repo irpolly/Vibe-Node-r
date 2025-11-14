@@ -79,7 +79,7 @@ def finalize():
         else:
             return jsonify({"error": "No root manager defined"}), 400
 
-    root_agent: BaseAgent = agents[root_id]
+    root_agent: Agent = agents[root_id]
 
     edges = {e["source"]: e["target"] for e in canvas_cfg.get("edges", [])}
     log_lines = []

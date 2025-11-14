@@ -52,6 +52,28 @@ class Agent:
     async def run_iteration(self, instruction: str, vibe: str):
         raise NotImplementedError
 
+# --------------------------------------------------------------------------- #
+# Export create_agents for main.py
+# --------------------------------------------------------------------------- #
+def create_agents(canvas_cfg: Dict[str, Any]) -> Dict[str, "Agent"]:
+    import importlib
+    agents_mod = importlib.import_module('agents')
+    agents: Dict[str, "Agent"] = {}
+
+    for node in canvas_cfg.get('nodes', []):
+        if node.get('type') != 'agentNode':
+            continue
+        label = node['data']['label']
+        class_name = Session.AGENT_MAP.get(label)
+        if not class_name:
+            continue
+        cls = getattr(agents_mod, class_name, Agent)
+        agents[node['id']] = cls(
+            node_id=node['id'],
+            config=node['data'].get('config', {}),
+            session=None
+        )
+    return agents
 
 # --------------------------------------------------------------------------- #
 # Manager

@@ -3,6 +3,7 @@ import os
 import time
 from typing import List, Dict, Any
 import asyncio
+from agents import Agent
 
 # --- Data Structures ---
 class Message:
