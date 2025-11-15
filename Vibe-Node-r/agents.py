@@ -38,116 +38,80 @@ class Agent:
             return f"API error: {e}"
 
 
-# ------------------------------------------------------------------
-# CoderAgent – Phaser + PixiJS, JSON-only, retry shield
-# ------------------------------------------------------------------
-class CoderAgent(Agent):
-    async def run_finalization(self, vibe: str, instructions: str | None = None):
-        self.speak(await self.generate_response(
-            f"Launching Phaser+PixiJS for vibe: '{vibe}'."))
-        await self.think(2)
-
-        # ----- build context -------------------------------------------------
-        ctx = "\n".join(
-            f"- {m.agent_name}: {m.text}"
-            for m in self.session.messages
-            if m.agent_name != self.role
-        ) or "No prior context."
-
-        # ----- raw-string prompt (no Python escape problems) ----------------
-        prompt = r"""
-You are a JSON-only code generator. Output **exactly**:
-
-{{"index.html":"<html>...</html>"}}
-
-Vibe: '{vibe}'
-Team context: {ctx}
-Instructions: {instructions}
-
-MANDATORY:
-1. ONE key → "index.html".
-2. CDNs (exact):
-   <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
-   <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.14.1/dist/pixi.min.js"></script>
-3. NO external assets → Phaser.Graphics / Pixi filters only.
-4. HTML/JS **single line** – use \\n for line-breaks, \" for quotes.
-5. Phaser config → type:AUTO, width:800, height:600, parent:'game-container',
-   physics:{default:'arcade'}, scale:{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH}
-6. Scene: preload(){}, create(){this.scene.start('MainScene');}, update(){}
-7. MainScene extends Phaser.Scene with preload/create/update.
-8. Mobile-ready, touch/mouse, win/lose, restart.
-9. NO markdown, NO ```, NO extra text.
-
-VALID JSON ONLY.
-""".format(vibe=vibe, ctx=ctx, instructions=instructions or 'None')
-
-        files = await self._generate(prompt)
-        for name, content in files.items():
-            self.session.add_artifact(name, content)
-        self.speak("Phaser build ready.")
-
-    async def run_iteration(self, instruction: str, original_vibe: str):
-        self.speak(await self.generate_response(
-            f"Iterating: '{instruction}'."))
-        await self.think(1)
-
-        summary = f"Files: {', '.join(self.session.get_artifacts())}"
-        prompt = r"""
-REFINE the game. Instruction: '{instruction}'
-Original vibe: {original_vibe}
-Current state: {summary}
-
-Output **full** {{"index.html":"..."}} obeying ALL rules above.
-VALID JSON ONLY.
-""".format(instruction=instruction, original_vibe=original_vibe, summary=summary)
-
-        files = await self._generate(prompt)
-        for name, content in files.items():
-            self.session.add_artifact(name, content)
-        self.speak("Iteration applied.")
-
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------
+    #  CoderAgent – the ONLY part you need to change
+    # --------------------------------------------------------------
     async def _generate(self, prompt: str, max_retries: int = 3) -> Dict[str, str]:
+        """
+        Generates *valid* JSON → {"index.html": "<single-line html>"}
+        Retries with the exact parse error until it works or falls back.
+        """
         model = GenerativeModel(
             self.config.get("llm", "gemini-1.5-pro"),
-            system_instruction="JSON-only, perfectly escaped, single-line HTML/JS."
+            system_instruction=(
+                "You are a JSON-only code generator. "
+                "Output **exactly** one key: \"index.html\". "
+                "Escape quotes with \\\", line-breaks with \\n. "
+                "Never use real new-lines inside the string. "
+                "No markdown, no ```, no extra text."
+            )
         )
-        cfg = {"response_mime_type": "application/json",
-               "max_output_tokens": 16384,
-               "temperature": 0.0}
+        cfg = {
+            "response_mime_type": "application/json",
+            "max_output_tokens": 16384,
+            "temperature": 0.0,
+        }
 
-        last_err = None
+        last_error = None
         for attempt in range(1, max_retries + 1):
             try:
                 resp = await model.generate_content_async(prompt, generation_config=cfg)
-                txt = resp.text.strip()
-                txt = txt.removeprefix("```json").removesuffix("```").strip()
+                raw = resp.text.strip()
 
-                data = json.loads(txt)
+                # Strip any code-block wrappers Gemini loves to add
+                if raw.startswith("```json"):
+                    raw = raw[7:]
+                if raw.endswith("```"):
+                    raw = raw[:-3]
+                raw = raw.strip()
+
+                data = json.loads(raw)                     # <-- this is where it used to die
                 html = data.get("index.html", "")
-                if not html or "phaser" not in html.lower() or "pixi" not in html.lower():
-                    raise ValueError("Missing CDNs")
+
+                # Basic sanity – must contain the two CDNs and Phaser init
+                if not html:
+                    raise ValueError("Empty index.html")
+                if "phaser" not in html.lower() or "pixi" not in html.lower():
+                    raise ValueError("Missing Phaser/Pixi CDN")
                 if "new Phaser.Game" not in html:
-                    raise ValueError("No Phaser init")
-                self.speak(f"Success attempt {attempt}.")
+                    raise ValueError("Missing Phaser.Game init")
+
+                self.speak(f"JSON parsed on attempt {attempt}.")
                 return data
 
             except (json.JSONDecodeError, ValueError) as e:
-                last_err = str(e)
-                print(f"Attempt {attempt} failed: {last_err}")
+                last_error = str(e)
+                print(f"[Coder] attempt {attempt} failed → {last_error}")
                 if attempt < max_retries:
-                    prompt = f"{prompt}\n\nFIX: '{last_err}'. Regenerate VALID JSON."
-                else:
-                    break
+                    # Feed the *exact* error back to Gemini so it can self-correct
+                    prompt = (
+                        f"{prompt}\n\n--- PREVIOUS ERROR ---\n{last_error}\n"
+                        "Regenerate **valid** JSON with proper escaping."
+                    )
+                # else: fall through to fallback
 
-        # ---- fallback ----------------------------------------------------
+        # --------------------------------------------------------------
+        #  Fallback – never let the workflow crash
+        # --------------------------------------------------------------
         fallback_html = (
-            "<!DOCTYPE html><html><body><h1>Code-gen failed</h1>"
-            f"<p>Error: {last_err or 'unknown'}</p></body></html>"
+            "<!DOCTYPE html><html><head><title>Code-gen fallback</title>"
+            "</head><body style='margin:0;background:#111;color:#fff;font-family:sans-serif;"
+            "display:flex;align-items:center;justify-content:center;height:100vh'>"
+            f"<div><h1>Code-gen failed</h1><p>{last_error or 'unknown'}</p>"
+            "<p>Retry the workflow – the agents will fix it.</p></div></body></html>"
         )
         self.speak("Fallback HTML generated.")
         return {"index.html": fallback_html}
-
 
 # ------------------------------------------------------------------
 # TesterAgent – runtime sanity only
