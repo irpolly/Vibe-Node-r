@@ -108,173 +108,105 @@ class ManagerAgent(Agent):
             self.speak("I can't find a Coder Agent in this workflow to handle the instruction.")
 
 
+# Replace the ENTIRE CoderAgent class in agents.py with this pristine beast.
+# Ditches Kaboom for Phaser 3.80+ (stable as of 2025<grok-card data-id="7453d3" data-type="citation_card"></grok-card><grok-card data-id="cf1465" data-type="citation_card"></grok-card>) + PixiJS for sprite bling.
+# Prompts enforce: CDN loads, preload(), no external assets (procedural shapes/colors), error-proof scenes.
+# Outputs single index.html (all inline) for iframe perfection<grok-card data-id="682277" data-type="citation_card"></grok-card>.
+
 class CoderAgent(Agent):
     async def run_finalization(self, vibe: str, instructions: str | None = None):
-        """Generates the first version of the code artifacts."""
-        self.speak(await self.generate_response("Acknowledging the team's concepts. I will now generate the first version of the game code and assets."))
-        await self.think(2.5)
-        
-        self.speak("Generating the initial code artifacts now.")
-        
-        conversation_history = "\n".join([f"{msg.agent_name}: {msg.text}" for msg in self.session.messages])
-        files_dict = await self._generate_code_artifacts(conversation_history, vibe, instructions)
-        
-        if isinstance(files_dict, dict) and 'error.html' not in files_dict:
-            for filename, content in files_dict.items():
-                self.session.add_artifact(filename, content)
-            self.speak(f"Initial version complete. Generated {len(files_dict)} artifacts: {', '.join(files_dict.keys())}.")
-        else:
-            self.speak("I had trouble structuring the files correctly. Please check the logs.")
-            if isinstance(files_dict, dict):
-                 for filename, content in files_dict.items():
-                    self.session.add_artifact(filename, content)
-            else:
-                 self.session.add_artifact("error.html", "<html><body>Failed to generate valid code.</body></html>")
-
-
-    async def run_iteration(self, instruction: str, vibe: str):
-        """Handles an iterative change request from the user or manager."""
-        self.speak(await self.generate_response(f"I will now process the new instruction: '{instruction}'."))
+        self.speak(await self.generate_response(f"🔥 Firing up Phaser + PixiJS for vibe: '{vibe}'. No blank screens on my watch."))
         await self.think(2)
 
-        current_files = {filename: self.session.get_artifact_content(filename) for filename in self.session.get_artifacts() if self.session.get_artifact_content(filename)}
-        
-        # Filter out any previous error files to avoid confusing the model.
-        valid_files = {k: v for k, v in current_files.items() if not k.endswith('error.html')}
+        # Team context
+        context = "\n".join([f"- {msg.agent_name}: {msg.text}" for msg in self.session.messages if msg.agent_name != self.role])
 
-        files_to_pass_to_model = valid_files if valid_files else None
-
-        if not files_to_pass_to_model:
-            self.speak("The previous build failed or is empty. I will generate the code from scratch using the original vibe and recent feedback.")
-        else:
-            self.speak("I will now modify the existing code based on the new instruction.")
-
-        conversation_history = "\n".join([f"{msg.agent_name}: {msg.text}" for msg in self.session.messages])
-        
-        # The `instruction` (which could be a bug report or user feedback) is passed as the primary instruction to the model.
-        # `files_to_pass_to_model` will be None if generating from scratch, which is what _generate_code_artifacts expects.
-        updated_files_dict = await self._generate_code_artifacts(
-            conversation_history, vibe, instruction, files_to_pass_to_model
-        )
-
-        if isinstance(updated_files_dict, dict) and 'error.html' not in updated_files_dict:
-            deleted_files = set(valid_files.keys()) - set(updated_files_dict.keys())
-            for filename, content in updated_files_dict.items():
-                self.session.add_artifact(filename, content)
-            for filename in deleted_files:
-                self.session.add_artifact(filename, None) # This removes the file.
-            
-            # Also remove the error.html if it exists
-            if 'error.html' in current_files:
-                self.session.add_artifact('error.html', None)
-
-            self.speak(f"Code updated. Modified/created {len(updated_files_dict)} files and removed {len(deleted_files)} files.")
-        else:
-            # The generation failed again.
-            self.speak("I failed to apply the changes correctly. The code has not been updated.")
-            if isinstance(updated_files_dict, dict):
-                for filename, content in updated_files_dict.items():
-                    self.session.add_artifact(filename, content)
-
-    async def run(self, prompt: str, instructions: str | None = None):
-        """Full, standalone execution for the Coder agent."""
-        self.speak(await self.generate_response("Standalone run: I will generate the code based on the prompt."))
-        await self.run_finalization(prompt, instructions)
-
-    async def _generate_code_artifacts(self, conversation: str, vibe: str, instructions: str | None = None, existing_files: Dict[str, str] | None = None) -> Dict[str, str] | str:
-        instruction_block = f"USER INSTRUCTIONS:\n{instructions}" if instructions else "The user did not provide specific instructions."
-        context_block = ""
-        if existing_files:
-            context_block += "**CONTEXT: You are MODIFYING existing code.** Based on the user's latest instruction, you must update the following files. Return the complete, updated content for ALL files in the project, not just the ones you changed.\n"
-            for filename, content in existing_files.items():
-                context_block += f"--- START OF {filename} ---\n{content}\n--- END OF {filename} ---\n\n"
-        else:
-            context_block = "**CONTEXT: You are creating a NEW project from scratch.**"
-
-        system_instruction = f"""
-You are an expert frontend game developer. Your mission is to generate all necessary files for a complete, playable, single-file web-based game and output them as a single JSON object.
-
-**CREATIVITY & FLEXIBILITY:**
-The user's 'vibe' may be vague. Use your creative judgment to fill in the gaps. It is better to deliver a complete, simple, and functional game that captures the spirit of the vibe than to fail because a detail was unclear. Make opinionated choices to ensure a working final product.
-
-**CRITICAL REQUIREMENTS:**
-1.  **Output Format**: Your entire response MUST be a single, valid JSON object. The keys must be filenames (e.g., "index.html", "style.css", "game.js"), and the values must be the complete string content for each file. Do NOT output markdown, comments, or any text outside of the JSON object.
-2.  **File Structure**: You MUST generate at least three files:
-    - `index.html`: The main HTML file.
-    - `style.css`: For all CSS styles.
-    - `game.js`: For all JavaScript game logic using Kaboom.js.
-3.  **File Linking**: `index.html` MUST correctly link to the other files.
-    - It MUST include the Kaboom.js library from the CDN: `<script src="https://unpkg.com/kaboom@3000.0.1/dist/kaboom.js"></script>` in the `<head>`.
-    - The CSS link must be: `<link rel="stylesheet" href="style.css">`.
-    - The JS link must be: `<script src="game.js" type="module"></script>`. Place this in the `<body>`.
-4.  **Game Scope**: The game MUST be a simple, single demo level. It MUST have a start screen (e.g., with a "Start" button), a win condition/screen, and a lose condition/screen.
-5.  **Playability**: The game MUST be playable on both desktop (keyboard controls) and mobile (touchscreen controls).
-
-**GAME LIBRARY: KABOOM.JS (use `https://unpkg.com/kaboom@3000.0.1/dist/kaboom.js`)**
--   **Initialization**: Initialize Kaboom in `game.js`. Let it create its own canvas: `kaboom()`. Do NOT specify a canvas in the options.
--   **Scenes**: Structure your game with scenes (e.g., "start", "game", "win", "lose").
--   **Controls (CRITICAL for Playability)**:
-    -   **Desktop**: Use keyboard events like `onKeyPress("space", ...)` for jumping or actions, and `onKeyDown("left", ...)` for continuous movement.
-    -   **Mobile/Touch**: Use `onClick(() => {{ ... }})` or `onTouchStart(() => {{ ... }})` for actions. For movement, a good pattern is to check the touch position: `if (mousePos().x < width() / 2) {{ /* move left */ }} else {{ /* move right */ }}`.
-    -   **Combine Both**: Ensure actions can be triggered by EITHER keyboard OR touch. For example, a jump could be triggered by the spacebar OR a screen tap.
--   **Movement**: Use `.move()` for continuous movement and `.jump()` for jumps. For player direction, use `player.flipX = true` for left and `player.flipX = false` for right.
-
-{context_block}
-{instruction_block}
-
-Now, generate the complete and updated file structure as a single JSON object. Start with `{{` and end with `}}`.
-"""
         prompt = f"""
-        INITIAL VIBE: "{vibe}"
-        AGENT CONVERSATION HISTORY:
-        {conversation}
+You are an elite Phaser 3 Coder Agent. Build a COMPLETE, standalone, MOBILE-FRIENDLY browser game matching vibe: '{vibe}'.
+Team Context: {context}
+User Instructions: {instructions or 'None'}
 
-        Generate the JSON object now.
-        """
+MANDATORY RULES (FAIL = CRASH):
+1. SINGLE FILE: Output JSON {{"index.html": "FULL HTML with inline <script> for ALL JS/CSS"}}. NO separate files.
+2. CDNs: 
+   - Phaser: <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script><grok-card data-id="460ed2" data-type="citation_card"></grok-card><grok-card data-id="94612c" data-type="citation_card"></grok-card>
+   - PixiJS: <script src="https://cdn.jsdelivr.net/npm/pixijs@8.0.0/dist/pixi.min.js"></script> (for advanced sprites/particles)<grok-card data-id="6cf611" data-type="citation_card"></grok-card>
+3. NO EXTERNAL ASSETS: Procedural graphics ONLY (Phaser.Graphics rectangles/circles/lines/colors/gradients). Pixi for glows/particles.
+4. STRUCTURE:
+   - config: {{type: Phaser.AUTO, width: 800, height: 600, parent: 'game-container', physics: {{default: 'arcade'}}, scale: {{mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH}}}}
+   - Scenes: preload() (empty or preload CDNs if needed), create() (build world), update() (game loop).
+   - Touch/mouse controls. Win/lose states. Score. Restart.
+5. COMMON AI PITFALLS - AVOID:
+   - NO blank/black screens: Set scene.start('MainScene') in create().
+   - NO "object is not a class": Use 'new Phaser.Scene({key: "MainScene", preload, create, update})'.
+   - Fullscreen ready: this.scale.startFullscreen().
+   - Mobile: Prevent zoom, handle orientation.
+6. Vibe-fit: 60s playable loop. Physics, collisions, animations.
+
+Think: "Will this run in iframe w/o errors? Console F12 clean?"
+Output VALID JSON ONLY - no ```, no extras.
+"""
+
         try:
-            model_name = self.config.get("llm", "gemini-2.5-flash")
-            model = GenerativeModel(model_name, system_instruction=system_instruction)
+            files = await self._generate_files(prompt)
+            for filename, content in files.items():
+                self.session.add_artifact(filename, content)
+            self.speak("✅ Phaser game deployed: index.html ready for emulator glory.")
+        except Exception as e:
+            self.speak(f"Build failed: {e}")
+            raise
 
-            # Define generation config to manage token usage for gemini-2.5-flash
-            # This prevents the model from using all its tokens for "thinking" and failing on MAX_TOKENS.
-            generation_config = {
-                "response_mime_type": "application/json",
-                "max_output_tokens": 16384,
-                "thinking_config": {
-                    "thinking_budget": 8192
-                }
-            }
+    async def run_iteration(self, instruction: str, original_vibe: str):
+        self.speak(await self.generate_response(f"🔧 Iterating: '{instruction}'. Keeping Phaser vibe intact."))
+        await self.think(1)
 
-            response = await model.generate_content_async(prompt, generation_config=generation_config)
-            
-            text_response = response.text.strip()
-            if text_response.startswith("```json"): text_response = text_response[7:].strip()
-            if text_response.endswith("```"): text_response = text_response[:-3].strip()
-            return json.loads(text_response)
-        except (json.JSONDecodeError, AttributeError, Exception) as e:
-            print(f"Error processing model response as JSON: {e}")
-            # Return the raw text for debugging if JSON parsing fails
-            raw_response_text = "Could not parse JSON response from model."
-            try:
-                raw_response_text = response.text
-            except (NameError, AttributeError):
-                # response object might not exist or might not have a .text attribute
-                pass 
-            
-            error_html = f"""
-            <html>
-                <head><title>Generation Error</title></head>
-                <body style="font-family: monospace; background-color: #111; color: #f00;">
-                    <h1>Agent Coder Error</h1>
-                    <p>Failed to generate structured game files. The model did not return valid JSON or hit a token limit.</p>
-                    <h2>Error Details:</h2>
-                    <pre>{e}</pre>
-                    <h2>Raw Model Response:</h2>
-                    <pre>{raw_response_text}</pre>
-                </body>
-            </html>
-            """
-            return {"error.html": error_html}
+        current_files = {f: self.session.get_artifact_content(f) for f in self.session.get_artifacts() if self.session.get_artifact_content(f)}
+
+        prompt = f"""
+REFINE existing Phaser game per: '{instruction}'.
+Original Vibe: {original_vibe}
+Current index.html: {json.dumps(current_files, indent=2)}
+
+SAME RULES AS FINALIZATION. Output FULL updated {{"index.html": "..."}}
+Fix ONLY instructed issues. Preserve playability.
+Simulate mental run: No crashes, visible action immediately.
+VALID JSON ONLY.
+"""
+
+        try:
+            updated_files = await self._generate_files(prompt)
+            for filename, content in updated_files.items():
+                self.session.add_artifact(filename, content)
+            self.speak("✅ Iteration complete - game enhanced.")
+        except Exception as e:
+            self.speak(f"Iteration error: {e}")
+            raise
+
+    async def _generate_files(self, prompt: str) -> Dict[str, str]:
+        model_name = self.config.get("llm", "gemini-1.5-pro")  # Pro for structure
+        system_instruction = """PRECISION CODER: Phaser 3 expert. Output pure JSON objects with runnable HTML/JS. NO chit-chat, NO code comments unless essential. Validate mentally before output."""
+        model = GenerativeModel(model_name, system_instruction=system_instruction)
+
+        generation_config = {
+            "response_mime_type": "application/json",
+            "max_output_tokens": 16384,
+            "temperature": 0.1  # Deterministic for code
+        }
+
+        response = await model.generate_content_async(prompt, generation_config=generation_config)
+        text_response = response.text.strip()
+        if text_response.startswith("```json"): text_response = text_response[7:].strip()
+        if text_response.endswith("```"): text_response = text_response[:-3].strip()
+        parsed = json.loads(text_response)
+
+        # Validate: Ensure index.html has Phaser CDN and basic structure
+        html = parsed.get("index.html", "")
+        if "phaser" not in html.lower() or "pixi" not in html.lower():
+            raise ValueError("Generated HTML missing Phaser/PixiJS CDNs")
+        if "<script>" not in html or "new Phaser.Game" not in html:
+            raise ValueError("Invalid Phaser structure")
+
+        return parsed
 
 class DesignerAgent(Agent):
     async def run(self, prompt: str, instructions: str | None = None):
@@ -286,36 +218,50 @@ class DesignerAgent(Agent):
         assets_response = await self.generate_response(assets_prompt)
         self.speak(assets_response)
 
+# Replace the ENTIRE TesterAgent class in agents.py.
+# Now QC-only: Syntax/runtime checks via mental sim + string scans. Ignores semantics unless unplayable.
+# [BUG] ONLY for crashes/blanks/no-loop/missing Phaser. Vibe gripes? Suggest in text, but [PASS].
+
 class TesterAgent(Agent):
     async def run(self, prompt: str, instructions: str | None = None) -> str:
-        # Get current code state to provide context
-        current_files = {filename: self.session.get_artifact_content(filename) for filename in self.session.get_artifacts() if self.session.get_artifact_content(filename)}
+        current_files = {f: self.session.get_artifact_content(f) for f in self.session.get_artifacts() if self.session.get_artifact_content(f)}
         
         if not current_files:
-            bug_report = "[BUG] No code artifacts were found to test. The Coder Agent needs to generate the files first."
+            bug_report = "[BUG] No artifacts. Coder slacked."
             self.speak(bug_report)
             return bug_report
 
-        code_context_block = "**Current Code Artifacts for Review:**\n"
-        for filename, content in current_files.items():
-            code_context_block += f"--- START OF {filename} ---\n{content}\n--- END OF {filename} ---\n\n"
+        # Focus on index.html
+        html_content = current_files.get("index.html", "")
+        if not html_content:
+            return "[BUG] Missing index.html - can't test void."
 
-        conversation_history = "\n".join([f"- {msg.agent_name}: {msg.text}" for msg in self.session.messages])
-        
+        history = "\n".join([f"- {msg.agent_name}: {msg.text}" for msg in self.session.messages[-10:]])
+
         tester_prompt = f"""
-        You are a QA Tester Agent. Your goal is to review the project and decide if it's ready.
-        Based on the project history and the latest code provided below, perform a conceptual test.
-        Check for common issues like broken logic, missing files (e.g., a missing game.js), incomplete features, or features that don't match the original 'vibe'.
+QA Tester: SCAN {json.dumps(current_files, indent=2)} for RUNTIME ERRORS ONLY.
 
-        Project History:
-        {conversation_history}
+CRASH CHECKLIST - [BUG] IMMEDIATELY IF:
+1. No Phaser CDN (<script src="...phaser..."> MISSING).
+2. No PixiJS if used.
+3. No 'new Phaser.Game(config)' or scenes (preload/create/update).
+4. Syntax: Unclosed tags, broken JS (scan for obvious: unmatched {}, ; missing).
+5. Blank screen traps: No scene.start(), empty create().
+6. No game loop: Missing update() or physics.
+7. No input: No this.input.on('pointerdown') etc.
+8. Mobile breaks: No scale FIT/CENTER.
 
-        {code_context_block}
+VIBE/SEMANTICS: IGNORE. [PASS] even if "wrong color" - as long as playable.
 
-        **Your response MUST start with either `[PASS]` or `[BUG]`.**
-        - If the game seems complete, playable, and meets the requirements, respond with `[PASS]` followed by a brief confirmation message (e.g., "[PASS] The game is playable and meets all core requirements.").
-        - If you find an issue, respond with `[BUG]` followed by a clear, concise, and actionable bug report for the Coder Agent (e.g., "[BUG] The game.js file is missing, so no game logic will run.").
-        """
+History: {history}
+
+MENTAL SIM: "F12 console clean? Visible action in 2s? Touch works?"
+[PASS] = "Playable, no crashes."
+[BUG] = SPECIFIC FIXABLE ISSUE (e.g. "[BUG] Missing Phaser.Scene class def").
+
+Response: [PASS|BUG] + 1-sentence explanation.
+"""
+
         response = await self.generate_response(tester_prompt)
         self.speak(response)
         return response
