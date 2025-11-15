@@ -41,6 +41,64 @@ class Agent:
             return f"API error: {e}"
 
 
+# ------------------------------------------------------------------
+# CoderAgent – JSON-ONLY, BULLETPROOF
+# ------------------------------------------------------------------
+class CoderAgent(Agent):
+    async def run_finalization(self, vibe: str, instructions: str | None = None):
+        self.speak(f"Building your: '{vibe}'.")
+        await self.think(2)
+
+        ctx = "\n".join(
+            f"- {m.agent_name}: {m.text}"
+            for m in self.session.messages
+            if m.agent_name != self.role
+        ) or "No context."
+
+        prompt = r"""
+You are a html friendly generator. Output EXACTLY:
+
+{"index.html":"<html>...</html>"}
+
+Vibe: '{vibe}'
+Context:
+{ctx}
+Instructions: {instructions}
+
+RULES:
+1. ONE key: "index.html"
+2. CDNs:
+   <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.14.1/dist/pixi.min.js"></script>
+
+VALID JSON ONLY.
+""".format(vibe=vibe, ctx=ctx, instructions=instructions or "None")
+
+        files = await self._generate(prompt)
+        for name, content in files.items():
+            self.session.add_artifact(name, content)
+        self.speak("Build ready.")
+
+    async def run_iteration(self, instruction: str, original_vibe: str):
+        self.speak(f"Iterating: '{instruction}'.")
+        await self.think(1)
+
+        summary = f"Files: {', '.join(self.session.get_artifacts())}"
+        prompt = r"""
+REFINE game.
+Instruction: '{instruction}'
+Original vibe: {original_vibe}
+State: {summary}
+
+Output FULL {"index.html":"..."}. Follow ALL rules.
+VALID JSON ONLY.
+""".format(instruction=instruction, original_vibe=original_vibe, summary=summary)
+
+        files = await self._generate(prompt)
+        for name, content in files.items():
+            self.session.add_artifact(name, content)
+        self.speak("Iteration applied.")
+
     async def _generate(self, prompt: str, max_retries: int = 3) -> Dict[str, str]:
         """
         Generates {"index.html": "<single-line HTML+JS>"}.
