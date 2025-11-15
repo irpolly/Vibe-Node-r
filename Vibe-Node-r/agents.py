@@ -1,11 +1,14 @@
-# --------------------------------------------------------------
-# agents.py – FULL, CLEAN, FINAL (replace entire file)
-# --------------------------------------------------------------
-# Java Johnson: No more JSON bombs. Raw strings, embedded template, debug dumps.
-# Forces single-line HTML/JS. Gemini can't escape.
+
 import asyncio
 import json
 from typing import TYPE_CHECKING, Dict, Any
+
+# --- HARD CODED PROJECT SETTINGS ---
+import vertexai
+vertexai.init(
+    project="cloud-run-hackathon-477510",   # ← YOUR PROJECT ID
+    location="europe-west4"                 # ← INFERRED FROM LOGS
+)
 
 from vertexai.generative_models import GenerativeModel
 
@@ -46,7 +49,7 @@ class Agent:
 # ------------------------------------------------------------------
 class CoderAgent(Agent):
     async def run_finalization(self, vibe: str, instructions: str | None = None):
-        self.speak(f"Building your: '{vibe}'.")
+        self.speak(f"Building Phaser+PixiJS for: '{vibe}'.")
         await self.think(2)
 
         ctx = "\n".join(
@@ -56,7 +59,7 @@ class CoderAgent(Agent):
         ) or "No context."
 
         prompt = r"""
-You are a html friendly generator. Output EXACTLY:
+You are a JSON-only generator. Output EXACTLY:
 
 {"index.html":"<html>...</html>"}
 
@@ -70,6 +73,14 @@ RULES:
 2. CDNs:
    <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
    <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.14.1/dist/pixi.min.js"></script>
+3. NO external assets. Use Phaser.Graphics.
+4. HTML+JS SINGLE LINE. Use \\n for breaks, \" for quotes.
+5. Config: type:AUTO, width:800, height:600, parent:'game-container',
+   physics:{default:'arcade'}, scale:{mode:Phaser.Scale.FIT, autoCenter:Phaser.Scale.CENTER_BOTH}
+6. Boot scene: preload(){}, create(){this.scene.start('MainScene');}
+7. MainScene extends Phaser.Scene with preload/create/update.
+8. Mobile/touch ready, win/lose, restart.
+9. NO markdown, NO ```, NO extra text.
 
 VALID JSON ONLY.
 """.format(vibe=vibe, ctx=ctx, instructions=instructions or "None")
@@ -99,23 +110,13 @@ VALID JSON ONLY.
             self.session.add_artifact(name, content)
         self.speak("Iteration applied.")
 
-    # --------------------------------------------------------------
-    #  CoderAgent._generate – FINAL, NO-MORE-TRUNCATION FIX
-    # --------------------------------------------------------------
     async def _generate(self, prompt: str, max_retries: int = 3) -> Dict[str, str]:
-        """
-        Generates {"index.html": "<single-line HTML+JS>"}.
-        • Handles Gemini truncation (`"index` suffix)
-        • Full DEBUG logs (remove when stable)
-        • Self-correcting retry loop
-        • Guaranteed fallback
-        """
         model = GenerativeModel(
             self.config.get("llm", "gemini-1.5-pro"),
             system_instruction=(
-                "You are a JSON-only generator. Output **exactly** one key: \"index.html\". "
-                "Escape every \" with \\\" and every newline with \\n. "
-                "Never emit real newlines inside the string. No markdown. No ```."
+                "JSON-only. Key: \"index.html\". "
+                "Escape \" with \\\", \\n for breaks. "
+                "No real newlines. No markdown."
             ),
         )
         cfg = {
@@ -130,68 +131,52 @@ VALID JSON ONLY.
                 resp = await model.generate_content_async(prompt, generation_config=cfg)
                 raw = resp.text.strip()
 
-                # ===== DEBUG: FULL RAW RESPONSE (REMOVE WHEN STABLE) =====
-                print(f"[CODER DEBUG] attempt {attempt} RAW RESPONSE:\n{raw}\n{'=' * 80}")
+                print(f"[CODER DEBUG] attempt {attempt} RAW:\n{raw}\n{'='*80}")
 
-                # Strip markdown fences
-                if raw.startswith("```json"):
-                    raw = raw[7:]
-                if raw.endswith("```"):
-                    raw = raw[:-3]
+                if raw.startswith("```json"): raw = raw[7:]
+                if raw.endswith("```"): raw = raw[:-3]
                 raw = raw.strip()
 
-                # ===== FIX TRUNCATION: Remove broken suffixes like '"index' =====
+                # Fix truncation
                 if raw.endswith('"index') or raw.endswith('"index.html') or raw.endswith('"index.html"'):
-                    print(f"[CODER DEBUG] Truncation detected. Slicing off: {raw[-20:]}")
-                    # Cut off after the last valid quote before the garbage
+                    print(f"[CODER DEBUG] Truncation fix: {raw[-20:]}")
                     raw = raw.rsplit('"', 1)[0] + '"}'
-                # Balance braces if needed
-                elif raw.count('{') > raw.count('}'):
-                    raw += '}' * (raw.count('{') - raw.count('}'))
-                elif raw.count('[') > raw.count(']'):
-                    raw += ']' * (raw.count('[') - raw.count(']'))
 
                 raw = raw.strip()
 
-                # ===== PARSE JSON =====
                 data = json.loads(raw)
                 html = data.get("index.html", "")
 
-                # Sanity checks
                 if not html:
-                    raise ValueError("index.html is empty")
+                    raise ValueError("Empty HTML")
                 if "phaser" not in html.lower() or "pixi" not in html.lower():
-                    raise ValueError("Missing Phaser/Pixi CDN")
+                    raise ValueError("Missing CDNs")
                 if "new Phaser.Game" not in html:
-                    raise ValueError("Missing Phaser.Game init")
+                    raise ValueError("No Phaser init")
 
-                self.speak(f"JSON parsed – attempt {attempt}.")
+                self.speak(f"Parsed attempt {attempt}.")
                 return data
 
             except (json.JSONDecodeError, ValueError) as e:
                 last_err = str(e)
-                print(f"[CODER DEBUG] attempt {attempt} FAILED → {last_err}")
+                print(f"[CODER DEBUG] FAILED {attempt}: {last_err}")
 
                 if attempt < max_retries:
-                    prompt = (
-                        f"{prompt}\n\n--- PREVIOUS ERROR ---\n{last_err}\n"
-                        "Regenerate **valid, complete** JSON. Do not truncate. "
-                        "Ensure closing braces and quotes."
-                    )
+                    prompt = f"{prompt}\n\nFIX: '{last_err}'. Regenerate valid JSON."
 
-        # ===== FALLBACK HTML =====
-        fallback_html = (
-            "<!DOCTYPE html><html><head><title>Code-gen failed</title></head>"
-            "<body style='margin:0;background:#222;color:#fff;font-family:sans-serif;"
+        fallback = (
+            "<!DOCTYPE html><html><head><title>Fallback</title></head>"
+            "<body style='margin:0;background:#c00;color:#fff;font-family:sans-serif;"
             "display:flex;align-items:center;justify-content:center;height:100vh'>"
             f"<div><h1>Code-gen failed</h1><p>{last_err or 'unknown'}</p>"
-            "<p>Retry – agents will fix it.</p></div></body></html>"
+            "<p>Check logs for [CODER DEBUG]</p></div></body></html>"
         )
-        self.speak("Fallback HTML generated.")
-        return {"index.html": fallback_html}
-    
+        self.speak("Fallback generated.")
+        return {"index.html": fallback}
+
+
 # ------------------------------------------------------------------
-# TesterAgent – runtime only
+# TesterAgent
 # ------------------------------------------------------------------
 class TesterAgent(Agent):
     async def run(self, prompt: str, instructions: str | None = None) -> str:
@@ -213,16 +198,19 @@ class TesterAgent(Agent):
             "update()": "update() {" in html,
         }
 
-        history = "\n".join(
-            f"- {m.agent_name}: {m.text[:50]}..."
-            for m in self.session.messages[-5:]
-        )
+        history = "\n".join(f"- {m.agent_name}: {m.text[:50]}..." for m in self.session.messages[-5:])
 
         tester_prompt = f"""
 SCAN index.html for RUNTIME ERRORS.
 Checks: {json.dumps(checks)}
 History: {history}
 
+[BUG] only if:
+- Missing CDNs
+- No `new Phaser.Game`
+- No `update()`
+
+Ignore vibe. [PASS] if playable.
 Response: [PASS|BUG] + reason.
 """
 
@@ -251,7 +239,7 @@ class WriterAgent(Agent):
 
 
 # ------------------------------------------------------------------
-# Manager
+# Manager – CRASH-PROOF
 # ------------------------------------------------------------------
 class ManagerAgent(Agent):
     async def run(self, prompt: str, instructions: str | None = None):
@@ -272,22 +260,19 @@ class ManagerAgent(Agent):
         if designer:
             await designer.run(f"Visuals for '{prompt}'", instructions)
 
-        self.speak("Manager: Tasking Coder.")
+        self.speak("Tasking Coder.")
         try:
             await coder.run_finalization(prompt, instructions)
         except Exception as e:
-            self.speak(f"⚠️ Coder failed permanently: {e}")
-            # Force fallback artifact so Tester doesn't crash
-            fallback_html = (
-                "<!DOCTYPE html><html><head><title>Emergency Fallback</title></head>"
+            self.speak(f"⚠️ Coder crashed: {e}")
+            fallback = (
+                "<!DOCTYPE html><html><head><title>Emergency</title></head>"
                 "<body style='margin:0;background:#c00;color:#fff;font-family:sans-serif;"
                 "display:flex;align-items:center;justify-content:center;height:100vh'>"
-                "<div><h1>AGENTS CRASHED</h1>"
-                f"<p>Error: {e}</p>"
-                "<p>Check Cloud Run logs for [CODER DEBUG]</p></div></body></html>"
+                f"<div><h1>CRASH</h1><p>{e}</p></div></body></html>"
             )
-            self.session.add_artifact("index.html", fallback_html)
-        
+            self.session.add_artifact("index.html", fallback)
+
         for i in range(2):
             if not tester:
                 break
@@ -298,6 +283,10 @@ class ManagerAgent(Agent):
                 break
             bug = result.replace("[BUG]", "").strip()
             self.speak(f"Fixing: {bug}")
-            await coder.run_iteration(f"Fix: {bug}", prompt)
+            try:
+                await coder.run_iteration(f"Fix: {bug}", prompt)
+            except Exception as e:
+                self.speak(f"Iteration failed: {e}")
+                break
 
         self.speak("Workflow complete.")
