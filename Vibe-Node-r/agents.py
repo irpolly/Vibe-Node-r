@@ -1,5 +1,5 @@
 # --------------------------------------------------------------
-# agents.py  (replace the whole file)
+# agents.py  –  full file (replace the whole file)
 # --------------------------------------------------------------
 import asyncio
 import json
@@ -38,14 +38,74 @@ class Agent:
             return f"API error: {e}"
 
 
-    # --------------------------------------------------------------
-    #  CoderAgent – the ONLY part you need to change
-    # --------------------------------------------------------------
+# ------------------------------------------------------------------
+# CoderAgent – JSON-only, retry shield
+# ------------------------------------------------------------------
+class CoderAgent(Agent):
+    async def run_finalization(self, vibe: str, instructions: str | None = None):
+        self.speak(await self.generate_response(
+            f"Launching Phaser+PixiJS for vibe: '{vibe}'."))
+        await self.think(2)
+
+        ctx = "\n".join(
+            f"- {m.agent_name}: {m.text}"
+            for m in self.session.messages
+            if m.agent_name != self.role
+        ) or "No prior context."
+
+        prompt = r"""
+You are a JSON-only code generator. Output **exactly**:
+
+{{"index.html":"<html>...</html>"}}
+
+Vibe: '{vibe}'
+Team context: {ctx}
+Instructions: {instructions}
+
+MANDATORY:
+1. ONE key → "index.html".
+2. CDNs (exact):
+   <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.14.1/dist/pixi.min.js"></script>
+3. NO external assets → Phaser.Graphics / Pixi filters only.
+4. HTML/JS **single line** – use \\n for line-breaks, \" for quotes.
+5. Phaser config → type:AUTO, width:800, height:600, parent:'game-container',
+   physics:{default:'arcade'}, scale:{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH}
+6. Scene: preload(){}, create(){this.scene.start('MainScene');}, update(){}
+7. MainScene extends Phaser.Scene with preload/create/update.
+8. Mobile-ready, touch/mouse, win/lose, restart.
+9. NO markdown, NO ```, NO extra text.
+
+VALID JSON ONLY.
+""".format(vibe=vibe, ctx=ctx, instructions=instructions or 'None')
+
+        files = await self._generate(prompt)
+        for name, content in files.items():
+            self.session.add_artifact(name, content)
+        self.speak("Phaser build ready.")
+
+    async def run_iteration(self, instruction: str, original_vibe: str):
+        self.speak(await self.generate_response(
+            f"Iterating: '{instruction}'."))
+        await self.think(1)
+
+        summary = f"Files: {', '.join(self.session.get_artifacts())}"
+        prompt = r"""
+REFINE the game. Instruction: '{instruction}'
+Original vibe: {original_vibe}
+Current state: {summary}
+
+Output **full** {{"index.html":"..."}} obeying ALL rules above.
+VALID JSON ONLY.
+""".format(instruction=instruction, original_vibe=original_vibe, summary=summary)
+
+        files = await self._generate(prompt)
+        for name, content in files.items():
+            self.session.add_artifact(name, content)
+        self.speak("Iteration applied.")
+
+    # ------------------------------------------------------------------
     async def _generate(self, prompt: str, max_retries: int = 3) -> Dict[str, str]:
-        """
-        Generates *valid* JSON → {"index.html": "<single-line html>"}
-        Retries with the exact parse error until it works or falls back.
-        """
         model = GenerativeModel(
             self.config.get("llm", "gemini-1.5-pro"),
             system_instruction=(
@@ -68,17 +128,15 @@ class Agent:
                 resp = await model.generate_content_async(prompt, generation_config=cfg)
                 raw = resp.text.strip()
 
-                # Strip any code-block wrappers Gemini loves to add
                 if raw.startswith("```json"):
                     raw = raw[7:]
                 if raw.endswith("```"):
                     raw = raw[:-3]
                 raw = raw.strip()
 
-                data = json.loads(raw)                     # <-- this is where it used to die
+                data = json.loads(raw)
                 html = data.get("index.html", "")
 
-                # Basic sanity – must contain the two CDNs and Phaser init
                 if not html:
                     raise ValueError("Empty index.html")
                 if "phaser" not in html.lower() or "pixi" not in html.lower():
@@ -93,16 +151,12 @@ class Agent:
                 last_error = str(e)
                 print(f"[Coder] attempt {attempt} failed → {last_error}")
                 if attempt < max_retries:
-                    # Feed the *exact* error back to Gemini so it can self-correct
                     prompt = (
                         f"{prompt}\n\n--- PREVIOUS ERROR ---\n{last_error}\n"
                         "Regenerate **valid** JSON with proper escaping."
                     )
-                # else: fall through to fallback
 
-        # --------------------------------------------------------------
-        #  Fallback – never let the workflow crash
-        # --------------------------------------------------------------
+        # ---- fallback ----------------------------------------------------
         fallback_html = (
             "<!DOCTYPE html><html><head><title>Code-gen fallback</title>"
             "</head><body style='margin:0;background:#111;color:#fff;font-family:sans-serif;"
@@ -112,6 +166,7 @@ class Agent:
         )
         self.speak("Fallback HTML generated.")
         return {"index.html": fallback_html}
+
 
 # ------------------------------------------------------------------
 # TesterAgent – runtime sanity only
@@ -129,7 +184,6 @@ class TesterAgent(Agent):
             self.speak(r)
             return r
 
-        # ----- quick string checks -----------------------------------------
         checks = {
             "Phaser CDN": "phaser" in html.lower(),
             "Pixi CDN": "pixi" in html.lower(),
@@ -164,7 +218,7 @@ Response format: [PASS|BUG] + one-sentence reason.
 
 
 # ------------------------------------------------------------------
-# Designer / Writer – unchanged (just keep the old ones)
+# Designer / Writer – unchanged
 # ------------------------------------------------------------------
 class DesignerAgent(Agent):
     async def run(self, prompt: str, instructions: str | None = None):
@@ -200,18 +254,15 @@ class ManagerAgent(Agent):
         if not coder:
             raise RuntimeError("CoderAgent missing")
 
-        # ---- ideation ----------------------------------------------------
         self.speak("Manager: Tasking Writer and Designer with initial concepts.")
         if writer:
             await writer.run(f"Backstory + cutscenes for vibe: '{prompt}'", instructions)
         if designer:
             await designer.run(f"Visual concepts for vibe: '{prompt}'", instructions)
 
-        # ---- code --------------------------------------------------------
         self.speak("Manager: Tasking Coder with initial development.")
         await coder.run_finalization(prompt, instructions)
 
-        # ---- test-fix loop (max 2 retries) -------------------------------
         max_retries = 2
         for i in range(max_retries):
             if not tester:
