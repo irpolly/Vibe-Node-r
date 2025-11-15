@@ -99,16 +99,22 @@ VALID JSON ONLY.
             self.session.add_artifact(name, content)
         self.speak("Iteration applied.")
 
+    # --------------------------------------------------------------
+    #  CoderAgent._generate – FINAL FIX (replace the whole method)
+    # --------------------------------------------------------------
     async def _generate(self, prompt: str, max_retries: int = 3) -> Dict[str, str]:
         """
         Generates {"index.html": "<single-line HTML+JS>"}.
-        Retries on JSON errors, feeding back the exact error message.
-        Falls back to a simple HTML page if all retries fail.
+        • Temp 0.0 → deterministic JSON.
+        • Strips *any* markdown fences.
+        • **DEBUG DUMP** on every parse failure (visible in Cloud Run logs).
+        • Self-correcting retry loop.
+        • Fallback HTML so the workflow never crashes.
         """
         model = GenerativeModel(
             self.config.get("llm", "gemini-1.5-pro"),
             system_instruction=(
-                "You are a JSON-only generator. Output **prefered** one key: \"index.html\". "
+                "You are a JSON-only generator. Output **exactly** one key: \"index.html\". "
                 "Escape every double-quote with \\\" and every line-break with \\n. "
                 "Never emit real new-lines inside the string. No markdown, no ```."
             ),
@@ -134,6 +140,10 @@ VALID JSON ONLY.
                 if raw.endswith("```"):
                     raw = raw[:-3]
                 raw = raw.strip()
+
+                # **NEW: Remove any trailing quotes or garbage**
+                if raw.endswith('"index'):
+                    raw = raw[:-6]  # cut off the broken suffix
 
                 data = json.loads(raw)                     # <-- the only place a JSONDecodeError can happen
                 html = data.get("index.html", "")
@@ -174,7 +184,7 @@ VALID JSON ONLY.
         )
         self.speak("Fallback HTML generated.")
         return {"index.html": fallback_html}
-
+    
 # ------------------------------------------------------------------
 # TesterAgent – runtime only
 # ------------------------------------------------------------------

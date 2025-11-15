@@ -21,7 +21,7 @@ const MatrixBackground: React.FC = () => {
     }
 
     const characters = 'アァカサタナハマヤャラワガザダバパイィキシチニヒミリヰギジヂビピウゥクスツヌフムユュルグズブヅプエェケセテネヘメレヱゲゼデベペオォコソトノホモヨョロヲゴゾドボポヴッン';
-    const specialWord = ['V', 'i', 'b', 'e', 'N', 'o', 'd', 'e', '(r)', '  |', '/', '|  ', '\\', '|'];
+    const specialWord = ['V', 'i', 'b', 'e', 'N', 'o', 'd', 'e', '(r)', ' |', '/', '| ', '\\', ' |'];
     const specialWordColor = '#0381e9ff'; // bright blue
     const defaultColor = '#1a0f7cff'; // dark blue
 
