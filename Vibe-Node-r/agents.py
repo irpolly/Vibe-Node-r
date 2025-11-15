@@ -48,67 +48,88 @@ class Agent:
 # CoderAgent – JSON-ONLY, BULLETPROOF
 # ------------------------------------------------------------------
 class CoderAgent(Agent):
-    async def run_finalization(self, vibe: str, instructions: str | None = None):
+        async def run_finalization(self, vibe: str, instructions: str | None = None):
         self.speak(f"Building Phaser+PixiJS for: '{vibe}'.")
         await self.think(2)
 
-        ctx = "\n".join(
-            f"- {m.agent_name}: {m.text}"
-            for m in self.session.messages
+        # Slim context – last 3 messages only, to avoid token bloat
+        recent_ctx = "\n".join(
+            f"- {m.agent_name}: {m.text[:100]}..."
+            for m in self.session.messages[-3:]
             if m.agent_name != self.role
         ) or "No context."
 
-        prompt = r"""
-You are a JSON-only generator. Output EXACTLY:
+        # Embedded template – Gemini modifies, doesn't invent
+        template = r"""
+<!DOCTYPE html>
+<html>
+<head>
+<title>{vibe}</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body {{margin:0; overflow:hidden; background:#000;}}</style>
+</head>
+<body>
+<div id="game-container"></div>
+<script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pixi.js@8.14.1/dist/pixi.min.js"></script>
+<script>
+const config = {{
+    type: Phaser.AUTO,
+    width: 800,
+    height: 600,
+    parent: 'game-container',
+    physics: {{ default: 'arcade' }},
+    scale: {{ mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH }},
+    scene: BootScene
+}};
+const game = new Phaser.Game(config);
+class BootScene extends Phaser.Scene {{
+    constructor() {{ super('Boot'); }}
+    preload() {{ /* preload assets if needed */ }}
+    create() {{ this.scene.start('Main'); }}
+    update() {{}}
+}}
+class MainScene extends Phaser.Scene {{
+    constructor() {{ super('Main'); }}
+    preload() {{}}
+    create() {{ /* VIBE IMPLEMENTATION HERE */ }}
+    update() {{ /* GAME LOOP */ }}
+}}
+</script>
+</body>
+</html>
+"""
 
-{"index.html":"<html>...</html>"}
+        prompt = r"""
+You are a JSON-only generator. Output EXACTLY: {{"index.html":"..."}}
 
 Vibe: '{vibe}'
-Context:
-{ctx}
-Instructions: {instructions}
+Recent context: {recent_ctx}
+
+TASK: Modify the template below to match the vibe. Use Phaser.Graphics for shapes/colors. Add touch/mouse controls, win/lose, score. Keep procedural – no external assets.
+
+TEMPLATE (fill in create/update):
+{template}
 
 RULES:
-1. ONE key: "index.html"
-2. CDNs:
-   <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
-   <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.14.1/dist/pixi.min.js"></script>
-3. NO external assets. Use Phaser.Graphics.
-4. HTML+JS SINGLE LINE. Use \\n for breaks, \" for quotes.
-5. Config: type:AUTO, width:800, height:600, parent:'game-container',
-   physics:{default:'arcade'}, scale:{mode:Phaser.Scale.FIT, autoCenter:Phaser.Scale.CENTER_BOTH}
-6. Boot scene: preload(){}, create(){this.scene.start('MainScene');}
-7. MainScene extends Phaser.Scene with preload/create/update.
-8. Mobile/touch ready, win/lose, restart.
-9. NO markdown, NO ```, NO extra text.
+1. SINGLE FILE. Inline everything.
+2. Keep CDNs as-is.
+3. SINGLE LINE JS – \\n for breaks, \" for quotes.
+4. Mobile-ready: this.input.on('pointerdown').
+5. Vibe-fit: 60s playable loop.
+6. NO markdown, NO ```.
 
-VALID JSON ONLY.
-""".format(vibe=vibe, ctx=ctx, instructions=instructions or "None")
+VALID JSON ONLY – no truncation.
+""".format(vibe=vibe, recent_ctx=recent_ctx, template=template)
 
         files = await self._generate(prompt)
         for name, content in files.items():
+            # Post-fix: Ensure script closes
+            content = content.replace('</script>', '</script>\n</body>\n</html>')
+            content = content.replace('<script>', '<script>\n')
             self.session.add_artifact(name, content)
-        self.speak("Build ready.")
-
-    async def run_iteration(self, instruction: str, original_vibe: str):
-        self.speak(f"Iterating: '{instruction}'.")
-        await self.think(1)
-
-        summary = f"Files: {', '.join(self.session.get_artifacts())}"
-        prompt = r"""
-REFINE game.
-Instruction: '{instruction}'
-Original vibe: {original_vibe}
-State: {summary}
-
-Output FULL {"index.html":"..."}. Follow ALL rules.
-VALID JSON ONLY.
-""".format(instruction=instruction, original_vibe=original_vibe, summary=summary)
-
-        files = await self._generate(prompt)
-        for name, content in files.items():
-            self.session.add_artifact(name, content)
-        self.speak("Iteration applied.")
+        self.speak("Build ready – template enforced.")
 
     async def _generate(self, prompt: str, max_retries: int = 3) -> Dict[str, str]:
         model = GenerativeModel(
