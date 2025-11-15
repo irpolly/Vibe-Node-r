@@ -41,82 +41,18 @@ class Agent:
             return f"API error: {e}"
 
 
-# ------------------------------------------------------------------
-# CoderAgent – JSON-ONLY, BULLETPROOF
-# ------------------------------------------------------------------
-class CoderAgent(Agent):
-    async def run_finalization(self, vibe: str, instructions: str | None = None):
-        self.speak(f"Building your: '{vibe}'.")
-        await self.think(2)
-
-        ctx = "\n".join(
-            f"- {m.agent_name}: {m.text}"
-            for m in self.session.messages
-            if m.agent_name != self.role
-        ) or "No context."
-
-        prompt = r"""
-You are a html friendly generator. Output EXACTLY:
-
-{"index.html":"<html>...</html>"}
-
-Vibe: '{vibe}'
-Context:
-{ctx}
-Instructions: {instructions}
-
-RULES:
-1. ONE key: "index.html"
-2. CDNs:
-   <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
-   <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.14.1/dist/pixi.min.js"></script>
-
-VALID JSON ONLY.
-""".format(vibe=vibe, ctx=ctx, instructions=instructions or "None")
-
-        files = await self._generate(prompt)
-        for name, content in files.items():
-            self.session.add_artifact(name, content)
-        self.speak("Build ready.")
-
-    async def run_iteration(self, instruction: str, original_vibe: str):
-        self.speak(f"Iterating: '{instruction}'.")
-        await self.think(1)
-
-        summary = f"Files: {', '.join(self.session.get_artifacts())}"
-        prompt = r"""
-REFINE game.
-Instruction: '{instruction}'
-Original vibe: {original_vibe}
-State: {summary}
-
-Output FULL {"index.html":"..."}. Follow ALL rules.
-VALID JSON ONLY.
-""".format(instruction=instruction, original_vibe=original_vibe, summary=summary)
-
-        files = await self._generate(prompt)
-        for name, content in files.items():
-            self.session.add_artifact(name, content)
-        self.speak("Iteration applied.")
-
-    # --------------------------------------------------------------
-    #  CoderAgent._generate – FINAL FIX (replace the whole method)
-    # --------------------------------------------------------------
     async def _generate(self, prompt: str, max_retries: int = 3) -> Dict[str, str]:
         """
         Generates {"index.html": "<single-line HTML+JS>"}.
-        • Temp 0.0 → deterministic JSON.
-        • Strips *any* markdown fences.
-        • **DEBUG DUMP** on every parse failure (visible in Cloud Run logs).
-        • Self-correcting retry loop.
-        • Fallback HTML so the workflow never crashes.
+        Handles Gemini truncation, malformed JSON, and self-corrects.
+        FULL DEBUG LOGS in Cloud Run.
         """
         model = GenerativeModel(
             self.config.get("llm", "gemini-1.5-pro"),
             system_instruction=(
-                "You are a JSON-only generator. Output **exactly** one key: \"index.html\". "
-                "Escape every double-quote with \\\" and every line-break with \\n. "
-                "Never emit real new-lines inside the string. No markdown, no ```."
+                "You are a JSON-only generator. Output EXACTLY one key: \"index.html\". "
+                "Escape every \" with \\\" and every newline with \\n. "
+                "Never emit real newlines inside the string. No markdown. No ```."
             ),
         )
         cfg = {
@@ -131,24 +67,33 @@ VALID JSON ONLY.
                 resp = await model.generate_content_async(prompt, generation_config=cfg)
                 raw = resp.text.strip()
 
-                # ----- DEBUG DUMP (remove when stable) -----
-                print(f"[CODER DEBUG] attempt {attempt} raw response:\n{raw}\n{'='*60}")
+                # ===== DEBUG: FULL RAW RESPONSE (REMOVE WHEN STABLE) =====
+                print(f"[CODER DEBUG] attempt {attempt} RAW RESPONSE:\n{raw}\n{'=' * 80}")
 
-                # Strip any code fences Gemini loves to add
+                # Strip markdown fences
                 if raw.startswith("```json"):
                     raw = raw[7:]
                 if raw.endswith("```"):
                     raw = raw[:-3]
                 raw = raw.strip()
 
-                # **NEW: Remove any trailing quotes or garbage**
-                if raw.endswith('"index'):
-                    raw = raw[:-6]  # cut off the broken suffix
+                # ===== FIX TRUNCATION: Remove broken suffixes like '"index' =====
+                if raw.endswith('"index') or raw.endswith('"index.html') or raw.endswith('"index.html"'):
+                    print(f"[CODER DEBUG] Truncation detected. Slicing off: {raw[-20:]}")
+                    raw = raw.rsplit('"', 1)[0] + '"}'  # Reconstruct closing
+                elif raw.count('{') > raw.count('}'):
+                    raw += '}' * (raw.count('{') - raw.count('}'))
+                elif raw.count('[') > raw.count(']'):
+                    raw += ']' * (raw.count('[') - raw.count(']'))
 
-                data = json.loads(raw)                     # <-- the only place a JSONDecodeError can happen
+                # Final strip
+                raw = raw.strip()
+
+                # ===== PARSE JSON =====
+                data = json.loads(raw)
                 html = data.get("index.html", "")
 
-                # sanity checks
+                # Sanity checks
                 if not html:
                     raise ValueError("index.html is empty")
                 if "phaser" not in html.lower() or "pixi" not in html.lower():
@@ -161,26 +106,22 @@ VALID JSON ONLY.
 
             except (json.JSONDecodeError, ValueError) as e:
                 last_err = str(e)
-                # ----- DEBUG DUMP (remove when stable) -----
                 print(f"[CODER DEBUG] attempt {attempt} FAILED → {last_err}")
 
                 if attempt < max_retries:
-                    # feed the exact error back to Gemini so it can self-correct
                     prompt = (
                         f"{prompt}\n\n--- PREVIOUS ERROR ---\n{last_err}\n"
-                        "Regenerate **valid** JSON with proper escaping."
+                        "Regenerate **valid, complete** JSON. Do not truncate. "
+                        "Ensure closing braces and quotes."
                     )
-                # else fall through to fallback
 
-        # --------------------------------------------------------------
-        #  Fallback – never let the whole workflow die
-        # --------------------------------------------------------------
+        # ===== FALLBACK HTML =====
         fallback_html = (
-            "<!DOCTYPE html><html><head><title>Code-gen fallback</title></head>"
-            "<body style='margin:0;background:#111;color:#fff;font-family:sans-serif;"
+            "<!DOCTYPE html><html><head><title>Code-gen failed</title></head>"
+            "<body style='margin:0;background:#222;color:#fff;font-family:sans-serif;"
             "display:flex;align-items:center;justify-content:center;height:100vh'>"
             f"<div><h1>Code-gen failed</h1><p>{last_err or 'unknown'}</p>"
-            "<p>Retry the workflow – the agents will fix it.</p></div></body></html>"
+            "<p>Retry – agents will fix it.</p></div></body></html>"
         )
         self.speak("Fallback HTML generated.")
         return {"index.html": fallback_html}
