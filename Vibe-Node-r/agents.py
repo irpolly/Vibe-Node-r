@@ -99,16 +99,21 @@ VALID JSON ONLY.
             self.session.add_artifact(name, content)
         self.speak("Iteration applied.")
 
+    # --------------------------------------------------------------
+    #  CoderAgent._generate – FINAL, NO-MORE-TRUNCATION FIX
+    # --------------------------------------------------------------
     async def _generate(self, prompt: str, max_retries: int = 3) -> Dict[str, str]:
         """
         Generates {"index.html": "<single-line HTML+JS>"}.
-        Handles Gemini truncation, malformed JSON, and self-corrects.
-        FULL DEBUG LOGS in Cloud Run.
+        • Handles Gemini truncation (`"index` suffix)
+        • Full DEBUG logs (remove when stable)
+        • Self-correcting retry loop
+        • Guaranteed fallback
         """
         model = GenerativeModel(
             self.config.get("llm", "gemini-1.5-pro"),
             system_instruction=(
-                "You are a JSON-only generator. Output EXACTLY one key: \"index.html\". "
+                "You are a JSON-only generator. Output **exactly** one key: \"index.html\". "
                 "Escape every \" with \\\" and every newline with \\n. "
                 "Never emit real newlines inside the string. No markdown. No ```."
             ),
@@ -138,13 +143,14 @@ VALID JSON ONLY.
                 # ===== FIX TRUNCATION: Remove broken suffixes like '"index' =====
                 if raw.endswith('"index') or raw.endswith('"index.html') or raw.endswith('"index.html"'):
                     print(f"[CODER DEBUG] Truncation detected. Slicing off: {raw[-20:]}")
-                    raw = raw.rsplit('"', 1)[0] + '"}'  # Reconstruct closing
+                    # Cut off after the last valid quote before the garbage
+                    raw = raw.rsplit('"', 1)[0] + '"}'
+                # Balance braces if needed
                 elif raw.count('{') > raw.count('}'):
                     raw += '}' * (raw.count('{') - raw.count('}'))
                 elif raw.count('[') > raw.count(']'):
                     raw += ']' * (raw.count('[') - raw.count(']'))
 
-                # Final strip
                 raw = raw.strip()
 
                 # ===== PARSE JSON =====
@@ -266,9 +272,22 @@ class ManagerAgent(Agent):
         if designer:
             await designer.run(f"Visuals for '{prompt}'", instructions)
 
-        self.speak("Tasking Coder.")
-        await coder.run_finalization(prompt, instructions)
-
+        self.speak("Manager: Tasking Coder.")
+        try:
+            await coder.run_finalization(prompt, instructions)
+        except Exception as e:
+            self.speak(f"⚠️ Coder failed permanently: {e}")
+            # Force fallback artifact so Tester doesn't crash
+            fallback_html = (
+                "<!DOCTYPE html><html><head><title>Emergency Fallback</title></head>"
+                "<body style='margin:0;background:#c00;color:#fff;font-family:sans-serif;"
+                "display:flex;align-items:center;justify-content:center;height:100vh'>"
+                "<div><h1>AGENTS CRASHED</h1>"
+                f"<p>Error: {e}</p>"
+                "<p>Check Cloud Run logs for [CODER DEBUG]</p></div></body></html>"
+            )
+            self.session.add_artifact("index.html", fallback_html)
+        
         for i in range(2):
             if not tester:
                 break
