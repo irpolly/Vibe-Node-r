@@ -107,13 +107,24 @@ VALID JSON ONLY.
             self.session.add_artifact(name, content)
         self.speak("Iteration applied.")
 
+        # --------------------------------------------------------------
+    #  PATCH – CoderAgent._generate  (replace the whole method)
+    # --------------------------------------------------------------
     async def _generate(self, prompt: str, max_retries: int = 3) -> Dict[str, str]:
+        """
+        Generates {"index.html": "<single-line HTML+JS>"}.
+        • Temp 0.0 → deterministic JSON.
+        • Strips *any* markdown fences.
+        • **DEBUG DUMP** on every parse failure (visible in Cloud Run logs).
+        • Self-correcting retry loop.
+        • Fallback HTML so the workflow never crashes.
+        """
         model = GenerativeModel(
             self.config.get("llm", "gemini-1.5-pro"),
             system_instruction=(
-                "JSON-only. Key: \"index.html\". "
-                "Escape \" with \\\", \\n for breaks. "
-                "No real newlines. No markdown."
+                "You are a JSON-only generator. Output **exactly** one key: \"index.html\". "
+                "Escape every double-quote with \\\" and every line-break with \\n. "
+                "Never emit real new-lines inside the string. No markdown, no ```."
             ),
         )
         cfg = {
@@ -128,43 +139,55 @@ VALID JSON ONLY.
                 resp = await model.generate_content_async(prompt, generation_config=cfg)
                 raw = resp.text.strip()
 
+                # ----- DEBUG DUMP (remove when stable) -----
+                print(f"[CODER DEBUG] attempt {attempt} raw response:\n{raw}\n{'='*60}")
+
+                # Strip any code fences Gemini loves to add
                 if raw.startswith("```json"):
                     raw = raw[7:]
                 if raw.endswith("```"):
                     raw = raw[:-3]
                 raw = raw.strip()
 
-                data = json.loads(raw)
+                data = json.loads(raw)                     # <-- the only place a JSONDecodeError can happen
                 html = data.get("index.html", "")
 
+                # sanity checks
                 if not html:
-                    raise ValueError("Empty HTML")
+                    raise ValueError("index.html is empty")
                 if "phaser" not in html.lower() or "pixi" not in html.lower():
-                    raise ValueError("Missing CDNs")
+                    raise ValueError("Missing Phaser/Pixi CDN")
                 if "new Phaser.Game" not in html:
-                    raise ValueError("No Phaser init")
+                    raise ValueError("Missing Phaser.Game init")
 
-                self.speak(f"Parsed (attempt {attempt}).")
+                self.speak(f"JSON parsed – attempt {attempt}.")
                 return data
 
             except (json.JSONDecodeError, ValueError) as e:
                 last_err = str(e)
-                # DEBUG DUMP
-                print(f"[DEBUG] Raw response: {resp.text}")
-                print(f"[DEBUG] Error: {last_err}")
-                # END DEBUG
+                # ----- DEBUG DUMP (remove when stable) -----
+                print(f"[CODER DEBUG] attempt {attempt} FAILED → {last_err}")
 
                 if attempt < max_retries:
-                    prompt = f"{prompt}\n\nFIX: '{last_err}'. Regenerate valid JSON."
+                    # feed the exact error back to Gemini so it can self-correct
+                    prompt = (
+                        f"{prompt}\n\n--- PREVIOUS ERROR ---\n{last_err}\n"
+                        "Regenerate **valid** JSON with proper escaping."
+                    )
+                # else fall through to fallback
 
-        # Fallback
-        fallback = (
-            "<!DOCTYPE html><html><body><h1>Code-gen failed</h1>"
-            f"<p>{last_err or 'unknown'}</p></body></html>"
+        # --------------------------------------------------------------
+        #  Fallback – never let the whole workflow die
+        # --------------------------------------------------------------
+        fallback_html = (
+            "<!DOCTYPE html><html><head><title>Code-gen fallback</title></head>"
+            "<body style='margin:0;background:#111;color:#fff;font-family:sans-serif;"
+            "display:flex;align-items:center;justify-content:center;height:100vh'>"
+            f"<div><h1>Code-gen failed</h1><p>{last_err or 'unknown'}</p>"
+            "<p>Retry the workflow – the agents will fix it.</p></div></body></html>"
         )
-        self.speak("Fallback generated.")
-        return {"index.html": fallback}
-
+        self.speak("Fallback HTML generated.")
+        return {"index.html": fallback_html}
 
 # ------------------------------------------------------------------
 # TesterAgent – runtime only
