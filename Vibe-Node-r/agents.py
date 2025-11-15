@@ -108,7 +108,6 @@ class ManagerAgent(Agent):
             self.speak("I can't find a Coder Agent in this workflow to handle the instruction.")
 
 
-# CoderAgent: Phaser 3.90 + PixiJS 8.14.1. Prompts as raw str—no json.dumps at import time.
 class CoderAgent(Agent):
     async def run_finalization(self, vibe: str, instructions: str | None = None):
         self.speak(await self.generate_response(f"🔥 Firing up Phaser + PixiJS for vibe: '{vibe}'. No blank screens on my watch."))
@@ -139,9 +138,10 @@ MANDATORY RULES (FAIL = CRASH):
    - Fullscreen ready: this.scale.startFullscreen().
    - Mobile: Prevent zoom, handle orientation.
 6. Vibe-fit: 60s playable loop. Physics, collisions, animations.
+7. NO MARKDOWN, NO ```, NO COMMENTS OUTSIDE SCRIPT.
 
 Think: "Will this run in iframe w/o errors? Console F12 clean?"
-Output VALID JSON ONLY - no ```, no extras.
+Output VALID JSON ONLY.
 """
 
         try:
@@ -160,7 +160,6 @@ Output VALID JSON ONLY - no ```, no extras.
         # Current files as str summary (no full JSON dump—summarize to avoid bloat)
         artifacts = self.session.get_artifacts()
         current_summary = f"Files: {', '.join(artifacts)}. Assume index.html is base Phaser game."
-        # If you need full content, add: content = self.session.get_artifact_content('index.html') or ''
 
         prompt = f"""
 REFINE existing Phaser game per: '{instruction}'.
@@ -168,8 +167,7 @@ Original Vibe: {original_vibe}
 Current State: {current_summary}
 
 SAME RULES AS FINALIZATION. Output FULL updated {{"index.html": "..."}}. Fix ONLY instructed issues. Preserve playability.
-Simulate mental run: No crashes, visible action immediately.
-VALID JSON ONLY.
+JSON CRITICAL: Escaped strings, single-line values with \\n. VALID JSON ONLY.
 """
 
         try:
@@ -181,31 +179,62 @@ VALID JSON ONLY.
             self.speak(f"Iteration error: {e}")
             raise
 
-    async def _generate_files(self, prompt: str) -> Dict[str, str]:
+    async def _generate_files(self, prompt: str, max_retries: int = 3) -> Dict[str, str]:
         model_name = self.config.get("llm", "gemini-1.5-pro")
-        system_instruction = """PRECISION CODER: Phaser 3 expert. Output pure JSON objects with runnable HTML/JS. NO chit-chat, NO code comments unless essential. Validate mentally before output."""
+        system_instruction = """PRECISION CODER: Phaser 3 expert. Output pure JSON objects with runnable HTML/JS. NO chit-chat, NO code comments unless essential. Validate mentally before output. Ensure JSON is perfectly formed: escaped strings, no trailing commas, single-line values."""
         model = GenerativeModel(model_name, system_instruction=system_instruction)
 
         generation_config = {
             "response_mime_type": "application/json",
             "max_output_tokens": 16384,
-            "temperature": 0.1  # Deterministic for code
+            "temperature": 0.0  # Zero chaos for JSON purity
         }
 
-        response = await model.generate_content_async(prompt, generation_config=generation_config)
-        text_response = response.text.strip()
-        if text_response.startswith("```json"): text_response = text_response[7:].strip()
-        if text_response.endswith("```"): text_response = text_response[:-3].strip()
-        parsed = json.loads(text_response)
+        for attempt in range(1, max_retries + 1):
+            try:
+                response = await model.generate_content_async(prompt, generation_config=generation_config)
+                text_response = response.text.strip()
+                if text_response.startswith("```json"): 
+                    text_response = text_response[7:].strip()
+                if text_response.endswith("```"): 
+                    text_response = text_response[:-3].strip()
+                
+                parsed = json.loads(text_response)
+                
+                # Validate structure
+                html = parsed.get("index.html", "")
+                if not html or "phaser" not in html.lower() or "pixi" not in html.lower():
+                    raise ValueError("Generated HTML missing Phaser/PixiJS CDNs or empty")
+                if "<script>" not in html or "new Phaser.Game" not in html:
+                    raise ValueError("Invalid Phaser structure")
 
-        # Validate: Ensure index.html has Phaser CDN and basic structure
-        html = parsed.get("index.html", "")
-        if "phaser" not in html.lower() or "pixi" not in html.lower():
-            raise ValueError("Generated HTML missing Phaser/PixiJS CDNs")
-        if "<script>" not in html or "new Phaser.Game" not in html:
-            raise ValueError("Invalid Phaser structure")
+                self.speak(f"✅ Code gen success on attempt {attempt}.")
+                return parsed
+                
+            except json.JSONDecodeError as json_err:
+                error_msg = f"JSON parse fail: {str(json_err)}"
+                print(f"❌ Attempt {attempt}: {error_msg}. Text preview: {text_response[:100]}...")
+                if attempt < max_retries:
+                    prompt = f"{prompt}\n\nCRITICAL FIX: Previous output caused '{error_msg}'. Regenerate VALID JSON: escaped quotes (\\\"), no unterminated strings, single-line HTML/JS with \\n breaks."
+                else:
+                    # Fallback: Generate error stub
+                    fallback_html = """
+<!DOCTYPE html>
+<html><head><title>Code Gen Fail</title></head><body><h1>🔧 Agents jammed—retry workflow.</h1><p>Error: JSON malformed. Check logs.</p></body></html>
+"""
+                    parsed = {"index.html": fallback_html}
+                    self.speak("⚠️ Fallback HTML generated after retries.")
+                    return parsed
+                    
+            except ValueError as val_err:
+                error_msg = f"Validation fail: {str(val_err)}"
+                print(f"❌ Attempt {attempt}: {error_msg}")
+                if attempt < max_retries:
+                    prompt = f"{prompt}\n\nCRITICAL FIX: {error_msg}. Ensure CDNs and Phaser.Game in output."
+                else:
+                    raise  # Re-raise after max retries
 
-        return parsed
+        raise Exception("Max retries exhausted—JSON hell persists.")
 
 class DesignerAgent(Agent):
     async def run(self, prompt: str, instructions: str | None = None):
