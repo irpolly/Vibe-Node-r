@@ -46,7 +46,7 @@ class Agent:
 # ------------------------------------------------------------------
 class CoderAgent(Agent):
     async def run_finalization(self, vibe: str, instructions: str | None = None):
-        self.speak(f"Building Phaser+PixiJS for: '{vibe}'.")
+        self.speak(f"Building your: '{vibe}'.")
         await self.think(2)
 
         ctx = "\n".join(
@@ -56,7 +56,7 @@ class CoderAgent(Agent):
         ) or "No context."
 
         prompt = r"""
-You are a JSON-only generator. Output EXACTLY:
+You are a html friendly generator. Output EXACTLY:
 
 {"index.html":"<html>...</html>"}
 
@@ -70,14 +70,6 @@ RULES:
 2. CDNs:
    <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
    <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.14.1/dist/pixi.min.js"></script>
-3. NO external assets. Use Phaser.Graphics.
-4. HTML+JS SINGLE LINE. Use \\n for breaks, \" for quotes.
-5. Config: type:AUTO, width:800, height:600, parent:'game-container',
-   physics:{default:'arcade'}, scale:{mode:Phaser.Scale.FIT, autoCenter:Phaser.Scale.CENTER_BOTH}
-6. Boot scene: preload(){}, create(){this.scene.start('MainScene');}
-7. MainScene extends Phaser.Scene with preload/create/update.
-8. Mobile/touch ready, win/lose, restart.
-9. NO markdown, NO ```, NO extra text.
 
 VALID JSON ONLY.
 """.format(vibe=vibe, ctx=ctx, instructions=instructions or "None")
@@ -107,7 +99,7 @@ VALID JSON ONLY.
             self.session.add_artifact(name, content)
         self.speak("Iteration applied.")
 
-        # --------------------------------------------------------------
+    # --------------------------------------------------------------
     #  PATCH – CoderAgent._generate  (replace the whole method)
     # --------------------------------------------------------------
     async def _generate(self, prompt: str, max_retries: int = 3) -> Dict[str, str]:
@@ -222,12 +214,6 @@ SCAN index.html for RUNTIME ERRORS.
 Checks: {json.dumps(checks)}
 History: {history}
 
-[BUG] only if:
-- Missing CDNs
-- No `new Phaser.Game`
-- No `update()`
-
-Ignore vibe. [PASS] if playable.
 Response: [PASS|BUG] + reason.
 """
 
