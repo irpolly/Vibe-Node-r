@@ -108,18 +108,15 @@ class ManagerAgent(Agent):
             self.speak("I can't find a Coder Agent in this workflow to handle the instruction.")
 
 
-# Replace the ENTIRE CoderAgent class in agents.py with this pristine beast.
-# Ditches Kaboom for Phaser 3.80+ (stable as of 2025<grok-card data-id="7453d3" data-type="citation_card"></grok-card><grok-card data-id="cf1465" data-type="citation_card"></grok-card>) + PixiJS for sprite bling.
-# Prompts enforce: CDN loads, preload(), no external assets (procedural shapes/colors), error-proof scenes.
-# Outputs single index.html (all inline) for iframe perfection<grok-card data-id="682277" data-type="citation_card"></grok-card>.
-
+# CoderAgent: Phaser 3.90 + PixiJS 8.14.1. Prompts as raw str—no json.dumps at import time.
 class CoderAgent(Agent):
     async def run_finalization(self, vibe: str, instructions: str | None = None):
         self.speak(await self.generate_response(f"🔥 Firing up Phaser + PixiJS for vibe: '{vibe}'. No blank screens on my watch."))
         await self.think(2)
 
-        # Team context
-        context = "\n".join([f"- {msg.agent_name}: {msg.text}" for msg in self.session.messages if msg.agent_name != self.role])
+        # Team context (str, no JSON—build at runtime)
+        context_msgs = [f"- {msg.agent_name}: {msg.text}" for msg in self.session.messages if msg.agent_name != self.role]
+        context = "\n".join(context_msgs) if context_msgs else "No prior context."
 
         prompt = f"""
 You are an elite Phaser 3 Coder Agent. Build a COMPLETE, standalone, MOBILE-FRIENDLY browser game matching vibe: '{vibe}'.
@@ -129,8 +126,8 @@ User Instructions: {instructions or 'None'}
 MANDATORY RULES (FAIL = CRASH):
 1. SINGLE FILE: Output JSON {{"index.html": "FULL HTML with inline <script> for ALL JS/CSS"}}. NO separate files.
 2. CDNs: 
-   - Phaser: <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script><grok-card data-id="460ed2" data-type="citation_card"></grok-card><grok-card data-id="94612c" data-type="citation_card"></grok-card>
-   - PixiJS: <script src="https://cdn.jsdelivr.net/npm/pixijs@8.0.0/dist/pixi.min.js"></script> (for advanced sprites/particles)<grok-card data-id="6cf611" data-type="citation_card"></grok-card>
+   - Phaser: <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
+   - PixiJS: <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.14.1/dist/pixi.min.js"></script> (for advanced sprites/particles)
 3. NO EXTERNAL ASSETS: Procedural graphics ONLY (Phaser.Graphics rectangles/circles/lines/colors/gradients). Pixi for glows/particles.
 4. STRUCTURE:
    - config: {{type: Phaser.AUTO, width: 800, height: 600, parent: 'game-container', physics: {{default: 'arcade'}}, scale: {{mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH}}}}
@@ -138,7 +135,7 @@ MANDATORY RULES (FAIL = CRASH):
    - Touch/mouse controls. Win/lose states. Score. Restart.
 5. COMMON AI PITFALLS - AVOID:
    - NO blank/black screens: Set scene.start('MainScene') in create().
-   - NO "object is not a class": Use 'new Phaser.Scene({key: "MainScene", preload, create, update})'.
+   - NO "object is not a class": Use 'new Phaser.Scene({{key: "MainScene", preload, create, update}})'.
    - Fullscreen ready: this.scale.startFullscreen().
    - Mobile: Prevent zoom, handle orientation.
 6. Vibe-fit: 60s playable loop. Physics, collisions, animations.
@@ -160,15 +157,17 @@ Output VALID JSON ONLY - no ```, no extras.
         self.speak(await self.generate_response(f"🔧 Iterating: '{instruction}'. Keeping Phaser vibe intact."))
         await self.think(1)
 
-        current_files = {f: self.session.get_artifact_content(f) for f in self.session.get_artifacts() if self.session.get_artifact_content(f)}
+        # Current files as str summary (no full JSON dump—summarize to avoid bloat)
+        artifacts = self.session.get_artifacts()
+        current_summary = f"Files: {', '.join(artifacts)}. Assume index.html is base Phaser game."
+        # If you need full content, add: content = self.session.get_artifact_content('index.html') or ''
 
         prompt = f"""
 REFINE existing Phaser game per: '{instruction}'.
 Original Vibe: {original_vibe}
-Current index.html: {json.dumps(current_files, indent=2)}
+Current State: {current_summary}
 
-SAME RULES AS FINALIZATION. Output FULL updated {{"index.html": "..."}}
-Fix ONLY instructed issues. Preserve playability.
+SAME RULES AS FINALIZATION. Output FULL updated {{"index.html": "..."}}. Fix ONLY instructed issues. Preserve playability.
 Simulate mental run: No crashes, visible action immediately.
 VALID JSON ONLY.
 """
@@ -183,7 +182,7 @@ VALID JSON ONLY.
             raise
 
     async def _generate_files(self, prompt: str) -> Dict[str, str]:
-        model_name = self.config.get("llm", "gemini-1.5-pro")  # Pro for structure
+        model_name = self.config.get("llm", "gemini-1.5-pro")
         system_instruction = """PRECISION CODER: Phaser 3 expert. Output pure JSON objects with runnable HTML/JS. NO chit-chat, NO code comments unless essential. Validate mentally before output."""
         model = GenerativeModel(model_name, system_instruction=system_instruction)
 
@@ -218,42 +217,45 @@ class DesignerAgent(Agent):
         assets_response = await self.generate_response(assets_prompt)
         self.speak(assets_response)
 
-# Replace the ENTIRE TesterAgent class in agents.py.
-# Now QC-only: Syntax/runtime checks via mental sim + string scans. Ignores semantics unless unplayable.
-# [BUG] ONLY for crashes/blanks/no-loop/missing Phaser. Vibe gripes? Suggest in text, but [PASS].
-
+# TesterAgent: QC-only, no JSON bloat. Runtime str checks.
 class TesterAgent(Agent):
     async def run(self, prompt: str, instructions: str | None = None) -> str:
-        current_files = {f: self.session.get_artifact_content(f) for f in self.session.get_artifacts() if self.session.get_artifact_content(f)}
-        
-        if not current_files:
+        artifacts = self.session.get_artifacts()
+        if not artifacts:
             bug_report = "[BUG] No artifacts. Coder slacked."
             self.speak(bug_report)
             return bug_report
 
-        # Focus on index.html
-        html_content = current_files.get("index.html", "")
+        # Focus on index.html content (str, no dump)
+        html_content = self.session.get_artifact_content("index.html") or ""
         if not html_content:
             return "[BUG] Missing index.html - can't test void."
 
-        history = "\n".join([f"- {msg.agent_name}: {msg.text}" for msg in self.session.messages[-10:]])
+        # Quick str scans for crashes
+        has_phaser = "phaser" in html_content.lower()
+        has_pixi = "pixi" in html_content.lower()
+        has_game_init = "new phaser.game" in html_content.lower()
+        has_scene = "phaser.scene" in html_content.lower()
+        has_update = "update() {" in html_content  # Basic loop check
+
+        history_summary = "\n".join([f"- {msg.agent_name}: {msg.text[:50]}..." for msg in self.session.messages[-5:]])
 
         tester_prompt = f"""
-QA Tester: SCAN {json.dumps(current_files, indent=2)} for RUNTIME ERRORS ONLY.
+QA Tester: SCAN index.html for RUNTIME ERRORS ONLY. Content preview: {html_content[:500]}... (truncated).
 
 CRASH CHECKLIST - [BUG] IMMEDIATELY IF:
-1. No Phaser CDN (<script src="...phaser..."> MISSING).
-2. No PixiJS if used.
-3. No 'new Phaser.Game(config)' or scenes (preload/create/update).
-4. Syntax: Unclosed tags, broken JS (scan for obvious: unmatched {}, ; missing).
-5. Blank screen traps: No scene.start(), empty create().
-6. No game loop: Missing update() or physics.
+1. No Phaser CDN (<script src="...phaser..."> MISSING): {has_phaser}.
+2. No PixiJS if referenced: {has_pixi}.
+3. No 'new Phaser.Game(config)' or scenes: {has_game_init}.
+4. No scene methods (preload/create/update): {has_scene} / {has_update}.
+5. Syntax: Unclosed tags, broken JS (scan obvious: unmatched {{}}, ; missing).
+6. Blank screen traps: No scene.start(), empty create().
 7. No input: No this.input.on('pointerdown') etc.
 8. Mobile breaks: No scale FIT/CENTER.
 
 VIBE/SEMANTICS: IGNORE. [PASS] even if "wrong color" - as long as playable.
 
-History: {history}
+History: {history_summary}
 
 MENTAL SIM: "F12 console clean? Visible action in 2s? Touch works?"
 [PASS] = "Playable, no crashes."
