@@ -22,14 +22,14 @@ const MatrixBackground: React.FC = () => {
 
     const characters = 'アァカサタナハマヤャラワガザダバパイィキシチニヒミリヰギジヂビピウゥクスツヌフムユュルグズブヅプエェケセテネヘメレヱゲゼデベペオォコソトノホモヨョロヲゴゾドボポヴッン';
     const specialWord = ['V', 'i', 'b', 'e', 'N', 'o', 'd', 'e', '(r)'];
-    const specialWordColor = '#FF0000'; // Red
-    const defaultColor = '#800020'; // Burgundy
+    const specialWordColor = '#0381e9ff'; // bright blue
+    const defaultColor = '#1a0f7cff'; // dark blue
 
     const draw = () => {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
       ctx.fillRect(0, 0, width, height);
       
-      ctx.font = 'bold 15px monospace';
+      ctx.font = 'bold 18px monospace';
       ctx.textAlign = 'center';
 
       for (let i = 0; i < drops.length; i++) {
