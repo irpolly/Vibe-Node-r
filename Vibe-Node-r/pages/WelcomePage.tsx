@@ -11,7 +11,7 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onEnter }) => {
     <div className="relative w-screen h-screen bg-black flex flex-col items-center justify-center overflow-hidden">
       <MatrixBackground />
       <div className="relative z-10 text-center p-4 animate-fade-in">
-        <h1 className="text-5xl md:text-7xl font-mono font-bold text-blue-400" style={{ textShadow: '0 0 10px #2563eb, 0 0 20px #2563eb' }}>
+        <h1 className="text-5xl md:text-7xl font-mono font-bold text-blue-400" style={{ textShadow: '0 0 10px #9c25ebff, 0 0 20px #db25ebff' }}> // Neon glow effect # 9c25ebff and #db25ebff
           Welcome to Vibe Node(r)
         </h1>
         <p className="text-green-300/80 mt-4 text-lg">Design your multi-agent reality.</p>
