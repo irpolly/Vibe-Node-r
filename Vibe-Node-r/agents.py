@@ -160,7 +160,11 @@ VALID JSON ONLY.
 
             except (json.JSONDecodeError, ValueError) as e:
                 last_err = str(e)
-                print(f"[Coder] attempt {attempt} failed: {last_err}")
+                # TEMP DEBUG: Dump raw response + error to logs
+                print(f"[DEBUG] Raw Gemini response: {resp.text}")
+                print(f"[DEBUG] Parse error: {last_err}")
+                # END TEMP DEBUG
+
                 if attempt < max_retries:
                     prompt = (
                         f"{prompt}\n\n--- PREVIOUS ERROR ---\n{last_err}\n"
