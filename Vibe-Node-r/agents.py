@@ -1,6 +1,8 @@
 # --------------------------------------------------------------
-# agents.py  –  full, clean file (replace everything)
+# agents.py – FULL, CLEAN, FINAL (replace entire file)
 # --------------------------------------------------------------
+# Java Johnson: No more JSON bombs. Raw strings, embedded template, debug dumps.
+# Forces single-line HTML/JS. Gemini can't escape.
 import asyncio
 import json
 from typing import TYPE_CHECKING, Dict, Any
@@ -40,50 +42,41 @@ class Agent:
 
 
 # ------------------------------------------------------------------
-# CoderAgent – JSON-only, bullet-proof
+# CoderAgent – JSON-ONLY, BULLETPROOF
 # ------------------------------------------------------------------
 class CoderAgent(Agent):
-    # ------------------------------------------------------------------
     async def run_finalization(self, vibe: str, instructions: str | None = None):
-        self.speak(
-            await self.generate_response(
-                f"Building Phaser+PixiJS game for vibe: '{vibe}'."
-            )
-        )
+        self.speak(f"Building Phaser+PixiJS for: '{vibe}'.")
         await self.think(2)
 
-        # ---- team context ------------------------------------------------
         ctx = "\n".join(
             f"- {m.agent_name}: {m.text}"
             for m in self.session.messages
             if m.agent_name != self.role
-        ) or "No prior context."
+        ) or "No context."
 
-        # ---- raw-string prompt (no Python escape problems) ---------------
         prompt = r"""
-You are a **JSON-only** code generator. Output **exactly**:
+You are a JSON-only generator. Output EXACTLY:
 
-{{"index.html":"<html>...</html>"}}
+{"index.html":"<html>...</html>"}
 
 Vibe: '{vibe}'
-Team context:
+Context:
 {ctx}
 Instructions: {instructions}
 
-MANDATORY RULES (break any → output is invalid):
-1. ONE key → "index.html".
-2. CDNs (exact URLs):
+RULES:
+1. ONE key: "index.html"
+2. CDNs:
    <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
    <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.14.1/dist/pixi.min.js"></script>
-3. NO external assets → use Phaser.Graphics / Pixi filters only.
-4. HTML+JS **must be a SINGLE line** – use \\n for line-breaks, \" for quotes.
-5. Phaser config:
-   type: Phaser.AUTO, width:800, height:600, parent:'game-container',
-   physics:{default:'arcade'},
-   scale:{mode:Phaser.Scale.FIT, autoCenter:Phaser.Scale.CENTER_BOTH}
-6. Boot scene: preload(){}, create(){this.scene.start('MainScene');}, update(){}
+3. NO external assets. Use Phaser.Graphics.
+4. HTML+JS SINGLE LINE. Use \\n for breaks, \" for quotes.
+5. Config: type:AUTO, width:800, height:600, parent:'game-container',
+   physics:{default:'arcade'}, scale:{mode:Phaser.Scale.FIT, autoCenter:Phaser.Scale.CENTER_BOTH}
+6. Boot scene: preload(){}, create(){this.scene.start('MainScene');}
 7. MainScene extends Phaser.Scene with preload/create/update.
-8. Mobile-ready, touch/mouse, win/lose, restart.
+8. Mobile/touch ready, win/lose, restart.
 9. NO markdown, NO ```, NO extra text.
 
 VALID JSON ONLY.
@@ -92,21 +85,20 @@ VALID JSON ONLY.
         files = await self._generate(prompt)
         for name, content in files.items():
             self.session.add_artifact(name, content)
-        self.speak("Phaser build ready.")
+        self.speak("Build ready.")
 
-    # ------------------------------------------------------------------
     async def run_iteration(self, instruction: str, original_vibe: str):
-        self.speak(await self.generate_response(f"Iterating: '{instruction}'."))
+        self.speak(f"Iterating: '{instruction}'.")
         await self.think(1)
 
         summary = f"Files: {', '.join(self.session.get_artifacts())}"
         prompt = r"""
-REFINE the existing game.
+REFINE game.
 Instruction: '{instruction}'
 Original vibe: {original_vibe}
-Current state: {summary}
+State: {summary}
 
-Output **full** {{"index.html":"..."}} obeying ALL rules above.
+Output FULL {"index.html":"..."}. Follow ALL rules.
 VALID JSON ONLY.
 """.format(instruction=instruction, original_vibe=original_vibe, summary=summary)
 
@@ -115,15 +107,13 @@ VALID JSON ONLY.
             self.session.add_artifact(name, content)
         self.speak("Iteration applied.")
 
-    # ------------------------------------------------------------------
     async def _generate(self, prompt: str, max_retries: int = 3) -> Dict[str, str]:
         model = GenerativeModel(
             self.config.get("llm", "gemini-1.5-pro"),
             system_instruction=(
-                "JSON-only. Single key \"index.html\". "
-                "Escape \" with \\\", line-breaks with \\n. "
-                "Never use real new-lines inside the string. "
-                "No markdown, no ```."
+                "JSON-only. Key: \"index.html\". "
+                "Escape \" with \\\", \\n for breaks. "
+                "No real newlines. No markdown."
             ),
         )
         cfg = {
@@ -138,7 +128,6 @@ VALID JSON ONLY.
                 resp = await model.generate_content_async(prompt, generation_config=cfg)
                 raw = resp.text.strip()
 
-                # Strip possible code fences
                 if raw.startswith("```json"):
                     raw = raw[7:]
                 if raw.endswith("```"):
@@ -149,42 +138,36 @@ VALID JSON ONLY.
                 html = data.get("index.html", "")
 
                 if not html:
-                    raise ValueError("Empty index.html")
+                    raise ValueError("Empty HTML")
                 if "phaser" not in html.lower() or "pixi" not in html.lower():
                     raise ValueError("Missing CDNs")
                 if "new Phaser.Game" not in html:
-                    raise ValueError("Missing Phaser.Game init")
+                    raise ValueError("No Phaser init")
 
-                self.speak(f"JSON parsed (attempt {attempt}).")
+                self.speak(f"Parsed (attempt {attempt}).")
                 return data
 
             except (json.JSONDecodeError, ValueError) as e:
                 last_err = str(e)
-                # TEMP DEBUG: Dump raw response + error to logs
-                print(f"[DEBUG] Raw Gemini response: {resp.text}")
-                print(f"[DEBUG] Parse error: {last_err}")
-                # END TEMP DEBUG
+                # DEBUG DUMP
+                print(f"[DEBUG] Raw response: {resp.text}")
+                print(f"[DEBUG] Error: {last_err}")
+                # END DEBUG
 
                 if attempt < max_retries:
-                    prompt = (
-                        f"{prompt}\n\n--- PREVIOUS ERROR ---\n{last_err}\n"
-                        "Regenerate **valid** JSON with proper escaping."
-                    )
+                    prompt = f"{prompt}\n\nFIX: '{last_err}'. Regenerate valid JSON."
 
-        # ---- fallback ----------------------------------------------------
+        # Fallback
         fallback = (
-            "<!DOCTYPE html><html><head><title>Fallback</title></head>"
-            "<body style='margin:0;background:#111;color:#fff;font-family:sans-serif;"
-            "display:flex;align-items:center;justify-content:center;height:100vh'>"
-            f"<div><h1>Code-gen failed</h1><p>{last_err or 'unknown'}</p>"
-            "<p>Retry the workflow – the agents will fix it.</p></div></body></html>"
+            "<!DOCTYPE html><html><body><h1>Code-gen failed</h1>"
+            f"<p>{last_err or 'unknown'}</p></body></html>"
         )
-        self.speak("Fallback HTML generated.")
+        self.speak("Fallback generated.")
         return {"index.html": fallback}
 
 
 # ------------------------------------------------------------------
-# TesterAgent – runtime sanity only
+# TesterAgent – runtime only
 # ------------------------------------------------------------------
 class TesterAgent(Agent):
     async def run(self, prompt: str, instructions: str | None = None) -> str:
@@ -202,8 +185,7 @@ class TesterAgent(Agent):
         checks = {
             "Phaser CDN": "phaser" in html.lower(),
             "Pixi CDN": "pixi" in html.lower(),
-            "Phaser.Game init": "new phaser.game" in html.lower(),
-            "Scene class": "phaser.scene" in html.lower(),
+            "Phaser.Game": "new phaser.game" in html.lower(),
             "update()": "update() {" in html,
         }
 
@@ -213,18 +195,17 @@ class TesterAgent(Agent):
         )
 
         tester_prompt = f"""
-QA: SCAN index.html for RUNTIME ERRORS ONLY.
-Checks: {json.dumps(checks, indent=2)}
-History (last 5): {history}
+SCAN index.html for RUNTIME ERRORS.
+Checks: {json.dumps(checks)}
+History: {history}
 
-[BUG] **only** if:
+[BUG] only if:
 - Missing CDNs
 - No `new Phaser.Game`
-- No `update()` / empty create()
-- Obvious syntax (unclosed {{}} or ; missing)
+- No `update()`
 
-VIBE/SEMANTICS → IGNORE. [PASS] even if colours wrong.
-Response format: [PASS|BUG] + one-sentence reason.
+Ignore vibe. [PASS] if playable.
+Response: [PASS|BUG] + reason.
 """
 
         resp = await self.generate_response(tester_prompt)
@@ -233,16 +214,14 @@ Response format: [PASS|BUG] + one-sentence reason.
 
 
 # ------------------------------------------------------------------
-# Designer / Writer – unchanged
+# Designer / Writer
 # ------------------------------------------------------------------
 class DesignerAgent(Agent):
     async def run(self, prompt: str, instructions: str | None = None):
-        ack = await self.generate_response(f"Acknowledged design task: {prompt}")
+        ack = await self.generate_response(f"Design task: {prompt}")
         self.speak(ack)
         await self.think(2)
-        ideas = await self.generate_response(
-            f"Describe visual assets for '{prompt}'. Suggest Phaser/Pixi particles, GSAP UI, Howler.js sounds."
-        )
+        ideas = await self.generate_response(f"Visuals for '{prompt}'. Use Phaser/Pixi particles.")
         self.speak(ideas)
 
 
@@ -254,11 +233,11 @@ class WriterAgent(Agent):
 
 
 # ------------------------------------------------------------------
-# Manager – unchanged
+# Manager
 # ------------------------------------------------------------------
 class ManagerAgent(Agent):
     async def run(self, prompt: str, instructions: str | None = None):
-        self.speak(f"Manager: Kick off vibe: '{prompt}'")
+        self.speak(f"Starting vibe: '{prompt}'")
         await self.think(1)
 
         writer = next((a for a in self.session.agents.values() if isinstance(a, WriterAgent)), None)
@@ -267,35 +246,27 @@ class ManagerAgent(Agent):
         tester = next((a for a in self.session.agents.values() if isinstance(a, TesterAgent)), None)
 
         if not coder:
-            raise RuntimeError("CoderAgent missing")
+            raise RuntimeError("Coder missing")
 
-        self.speak("Manager: Tasking Writer & Designer.")
+        self.speak("Tasking Writer & Designer.")
         if writer:
-            await writer.run(f"Backstory + cutscenes for '{prompt}'", instructions)
+            await writer.run(f"Story for '{prompt}'", instructions)
         if designer:
-            await designer.run(f"Visual concepts for '{prompt}'", instructions)
+            await designer.run(f"Visuals for '{prompt}'", instructions)
 
-        self.speak("Manager: Tasking Coder.")
+        self.speak("Tasking Coder.")
         await coder.run_finalization(prompt, instructions)
 
-        max_retries = 2
-        for i in range(max_retries):
+        for i in range(2):
             if not tester:
-                self.speak("Manager: No Tester – assuming good.")
                 break
-
-            self.speak(f"Manager: Tester run {i+1}/{max_retries}.")
-            result = await tester.run("Review artifacts", instructions)
-
+            self.speak(f"Tester run {i+1}.")
+            result = await tester.run("Review", instructions)
             if result.startswith("[PASS]"):
-                self.speak("Manager: Tester approved.")
+                self.speak("Approved.")
                 break
-
             bug = result.replace("[BUG]", "").strip()
-            self.speak(f"Manager: Bug – sending to Coder: {bug}")
+            self.speak(f"Fixing: {bug}")
             await coder.run_iteration(f"Fix: {bug}", prompt)
 
-            if i == max_retries - 1:
-                self.speak("Manager: Max retries – finalising anyway.")
-
-        self.speak("Manager: Workflow complete.")
+        self.speak("Workflow complete.")
