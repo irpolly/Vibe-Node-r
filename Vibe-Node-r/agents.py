@@ -99,22 +99,16 @@ VALID JSON ONLY.
             self.session.add_artifact(name, content)
         self.speak("Iteration applied.")
 
-    # --------------------------------------------------------------
-    #  PATCH – CoderAgent._generate  (replace the whole method)
-    # --------------------------------------------------------------
     async def _generate(self, prompt: str, max_retries: int = 3) -> Dict[str, str]:
         """
         Generates {"index.html": "<single-line HTML+JS>"}.
-        • Temp 0.0 → deterministic JSON.
-        • Strips *any* markdown fences.
-        • **DEBUG DUMP** on every parse failure (visible in Cloud Run logs).
-        • Self-correcting retry loop.
-        • Fallback HTML so the workflow never crashes.
+        Retries on JSON errors, feeding back the exact error message.
+        Falls back to a simple HTML page if all retries fail.
         """
         model = GenerativeModel(
             self.config.get("llm", "gemini-1.5-pro"),
             system_instruction=(
-                "You are a JSON-only generator. Output **exactly** one key: \"index.html\". "
+                "You are a JSON-only generator. Output **prefered** one key: \"index.html\". "
                 "Escape every double-quote with \\\" and every line-break with \\n. "
                 "Never emit real new-lines inside the string. No markdown, no ```."
             ),
