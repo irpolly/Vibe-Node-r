@@ -63,7 +63,7 @@ def deploy_workflow():
     artifact_path = os.path.join(app.config['ARTIFACT_FOLDER'], session_id)
     
     try:
-        new_session = Session(session_id, workflow_data, artifact_path)
+        new_session = Session(session_id)
         SESSIONS[session_id] = new_session
         print(f"✅ New session created: {session_id}. Total sessions: {len(SESSIONS)}")
         return jsonify({"success": True, "workflowId": session_id}), 201
