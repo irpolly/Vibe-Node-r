@@ -6,15 +6,15 @@ from typing import TYPE_CHECKING, Dict, Any
 # --- HARD CODED PROJECT SETTINGS ---
 import vertexai
 vertexai.init(
-    project="cloud-run-hackathon-477510",   # ← YOUR PROJECT ID
-    location="europe-west4"                 # ← INFERRED FROM LOGS
+    project="cloud-run-hackathon-477510",
+    project_number="85229041043",
+    location="europe-west4"
 )
 
 from vertexai.generative_models import GenerativeModel
 
 if TYPE_CHECKING:
     from session import Session
-
 
 # ------------------------------------------------------------------
 # Base Agent
@@ -43,89 +43,134 @@ class Agent:
         except Exception as e:
             return f"API error: {e}"
 
-
 # ------------------------------------------------------------------
 # CoderAgent – JSON-ONLY, BULLETPROOF
 # ------------------------------------------------------------------
 class CoderAgent(Agent):
+        # --------------------------------------------------------------
+    # CoderAgent – FINAL: TEMPLATE + FILL-IN-THE-BLANK ONLY
+    # --------------------------------------------------------------
     async def run_finalization(self, vibe: str, instructions: str | None = None):
-        self.speak(f"Building Phaser+PixiJS for: '{vibe}'.")
-        await self.think(2)
+        self.speak(f"Deploying bulletproof game for: '{vibe}'.")
+        await self.think(1)
 
-        recent_ctx = "\n".join(
-            f"- {m.agent_name}: {m.text[:120]}..."
-            for m in self.session.messages[-3:]
-            if m.agent_name != self.role
-        ) or "No context."
+        # Extract key nouns for procedural logic
+        keywords = vibe.lower().split()
+        is_cookie = any(w in keywords for w in ['cookie', 'biscuit', 'crumb'])
+        is_penguin = any(w in keywords for w in ['penguin', 'slide', 'icy', 'hill'])
+        is_goose = any(w in keywords for w in ['goose', 'honk', 'untitled'])
+        is_book = any(w in keywords for w in ['book', 'page', 'story'])
 
-        # BULLETPROOF TEMPLATE – Gemini CANNOT break this
-        template = """
-<!DOCTYPE html>
-<html>
-<head>
-<title>{vibe}</title>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>body{margin:0;overflow:hidden;background:#000}</style>
-</head>
-<body>
-<div id="game-container"></div>
+        # BULLETPROOF BASE TEMPLATE (never breaks)
+        base_html = f"""<!DOCTYPE html>
+<html><head><title>{vibe}</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{{margin:0;overflow:hidden;background:#111}}</style>
+</head><body><div id="game"></div>
 <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 <script>
-class BootScene extends Phaser.Scene {
-    constructor() { super('Boot'); }
-    create() { this.scene.start('Main'); }
-}
-class MainScene extends Phaser.Scene {
-    constructor() { super('Main'); }
-    preload() { }
-    create() {
-        this.add.text(400, 300, 'VIBE: {vibe}\\nLoading...', {fontSize: '32px', color: '#fff'}).setOrigin(0.5);
-        // VIBE CODE HERE
-    }
-    update() { }
-}
-const config = {
-    type: Phaser.AUTO,
-    width: 800,
-    height: 600,
-    parent: 'game-container',
-    physics: { default: 'arcade' },
-    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-    scene: [BootScene, MainScene]
-};
-new Phaser.Game(config);
-</script>
-</body>
-</html>
-""".format(vibe=vibe)
+class Boot extends Phaser.Scene {{
+  constructor() {{ super('Boot'); }}
+  create() {{ this.scene.start('Play'); }}
+}}
+class Play extends Phaser.Scene {{
+  constructor() {{ super('Play'); }}
+  preload() {{}}
+  create() {{
+    this.cameras.main.setBackgroundColor('#111');
+    this.score = 0;
+    this.scoreText = this.add.text(16, 16, 'Score: 0', {{fontSize:'24px',color:'#fff'}});
+    // --- VIBE START ---
+{vibe_insert}
+    // --- VIBE END ---
+  }}
+  update() {{
+{vibe_update}
+  }}
+}}
+new Phaser.Game({{
+  type: Phaser.AUTO, width: 800, height: 600, parent: 'game',
+  physics: {{default:'arcade'}}, scale: {{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH}},
+  scene: [Boot, Play]
+}});
+</script></body></html>"""
 
-        prompt = f"""
-You are a JSON-only generator. Output EXACTLY: {{"index.html":"..."}} 
+        # Vibe-specific fill-ins
+        insert = ""
+        update = ""
 
-Vibe: '{vibe}'
-Context: {recent_ctx}
-
-TASK: Replace the comment "// VIBE CODE HERE" with Phaser code that implements the vibe.
-Use only Phaser.Graphics, this.add.text(), this.physics.add.sprite(), etc.
-Add touch/mouse controls, win/lose, score.
-Keep it under 100 lines.
-
-RULES:
-- SINGLE LINE JS: use \\n for breaks, \" for quotes
-- NO external assets
-- NO markdown, NO ```
-
-VALID JSON ONLY.
+        if is_cookie:
+            insert = """
+    this.player = this.physics.add.sprite(400, 500, null).setSize(30,20);
+    this.player.setTint(0xD2691E);
+    this.add.graphics().fillStyle(0x8B4513).fillCircle(400,500,15);
+    this.cursors = this.input.keyboard.createCursorKeys();
+    this.goal = this.add.rectangle(400, 50, 60, 60, 0x00ff00).setStrokeStyle(4, 0xffffff);
+    this.physics.add.existing(this.goal);
+    this.physics.add.collider(this.player, this.goal, () => {{
+      this.score += 10; this.scoreText.setText('Score: '+this.score);
+      if (this.score >= 30) this.scene.start('Boot');
+    }});
+"""
+            update = """
+    if (this.cursors.left.isDown) this.player.x -= 5;
+    if (this.cursors.right.isDown) this.player.x += 5;
+    if (this.player.x < 0 || this.player.x > 800) this.scene.start('Boot');
 """
 
-        files = await self._generate(prompt)
-        for name, content in files.items():
-            # FINAL FIX: Ensure script is closed + escape newlines
-            content = content.replace('\n', '\\n').replace('\r', '')
-            content = content.replace('</script>', '</script>\\n</body>\\n</html>')
-            self.session.add_artifact(name, content)
-        self.speak("Build deployed – scene classes enforced.")
+        elif is_penguin:
+            insert = """
+    this.player = this.physics.add.sprite(100, 100, null).setSize(40,30).setTint(0xffffff);
+    this.add.graphics().fillStyle(0x000000).fillCircle(100,100,20);
+    this.physics.world.gravity.y = 300;
+    this.ground = this.add.rectangle(400, 580, 800, 40, 0x87CEEB);
+    this.physics.add.existing(this.ground, true);
+    this.coins = this.physics.add.group();
+    for(let i=0;i<5;i++) {{
+      let c = this.add.circle(200+i*120, 400, 15, 0xffd700);
+      this.physics.add.existing(c);
+      this.coins.add(c);
+    }}
+    this.physics.add.collider(this.player, this.ground);
+    this.physics.add.overlap(this.player, this.coins, (p,c) => {{ c.destroy(); this.score+=1; this.scoreText.setText('Score: '+this.score); }});
+"""
+            update = """
+    if (this.input.activePointer.isDown && this.player.body.onFloor()) {{
+      this.player.setVelocityY(-400);
+    }}
+"""
+
+        elif is_goose:
+            insert = """
+    this.player = this.physics.add.sprite(400, 300, null).setSize(50,40).setTint(0xffffff);
+    this.add.graphics().fillStyle(0xffff00).fillRect(380, 280, 40, 40);
+    this.input.on('pointerdown', () => {{
+      this.add.text(400, 200, 'HONK!', {{fontSize:'48px',color:'#ff0'}}).setOrigin(0.5);
+      this.time.delayedCall(500, () => this.scene.start('Boot'));
+    }});
+"""
+
+        elif is_book:
+            insert = """
+    this.pages = ['Page 1', 'Page 2', 'The End'];
+    this.current = 0;
+    this.text = this.add.text(400, 300, this.pages[0], {{fontSize:'32px',color:'#fff'}}).setOrigin(0.5);
+    this.input.on('pointerdown', () => {{
+      this.current++;
+      if (this.current >= this.pages.length) this.scene.start('Boot');
+      else this.text.setText(this.pages[this.current]);
+    }});
+"""
+
+        else:
+            insert = "this.add.text(400,300,'VIBE: {vibe}',{fontSize:'32px',color:'#0f0'}).setOrigin(0.5);".format(vibe=vibe)
+
+        # Final HTML
+        final_html = base_html.replace("{vibe_insert}", insert).replace("{vibe_update}", update)
+        final_html = final_html.replace("\n", "\\n").replace('"', '\\"')
+
+        self.session.add_artifact("index.html", final_html)
+        self.speak("Game deployed – zero AI codegen.")
 # ------------------------------------------------------------------
 # TesterAgent
 # ------------------------------------------------------------------
@@ -169,7 +214,6 @@ Response: [PASS|BUG] + reason.
         self.speak(resp)
         return resp
 
-
 # ------------------------------------------------------------------
 # Designer / Writer
 # ------------------------------------------------------------------
@@ -187,7 +231,6 @@ class WriterAgent(Agent):
         full = f"{prompt}. {instructions or ''}"
         story = await self.generate_response(full)
         self.speak(story)
-
 
 # ------------------------------------------------------------------
 # Manager – CRASH-PROOF
