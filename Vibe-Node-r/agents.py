@@ -43,182 +43,115 @@ class Agent:
             return f"API error: {e}"
 
 # ------------------------------------------------------------------
-# CoderAgent – JSON-ONLY, BULLETPROOF
+# CoderAgent – Guided Generation + Self-Debug Loop
 # ------------------------------------------------------------------
 class CoderAgent(Agent):
-        async def run_finalization(self, vibe: str, instructions: str | None = None):
-            self.speak(f"Deploying unbreakable game for: '{vibe}'.")
-            await self.think(1)
+    async def run_finalization(self, vibe: str, instructions: str | None = None):
+        self.speak(f"Generating for '{vibe}' – using shared state.")
+        await self.think(2)
 
-        # --- KEYWORD DETECTION ---
-            keywords = vibe.lower()
-            is_cookie = any(w in keywords for w in ['cookie', 'biscuit', 'crumb', 'stealth'])
-            is_penguin = any(w in keywords for w in ['penguin', 'slide', 'icy', 'hill', 'coin'])
-            is_goose = any(w in keywords for w in ['goose', 'honk', 'untitled'])
-            is_book = any(w in keywords for w in ['book', 'page', 'story', 'sentient'])
+        # Pull from shared
+        sprites = self.session.get_shared("sprites") or "{}"
+        script = self.session.get_shared("script") or "[]"
+        
+        # Slim prompt – chunked to avoid truncation
+        head_prompt = f"HTML head for '{vibe}' – title, viewport, style. JSON: {{\"head\": \"<head>...</head>\"}}"
+        head = await self.generate_response(head_prompt)
+        
+        create_prompt = f"Phaser create() for '{vibe}'. Use sprites: {sprites}. Add controls, score. JSON: {{\"create\": \"this.add...\"}}"
+        create = await self.generate_response(create_prompt)
+        
+        update_prompt = f"Phaser update() for '{vibe}'. Game loop, collisions. JSON: {{\"update\": \"if (cursors...\"}}"
+        update = await self.generate_response(update_prompt)
+        
+        # Assemble
+        full_js = f"class Play extends Phaser.Scene {{ constructor() {{ super('Play'); }} preload() {{}} create() {{ {create} }} update() {{ {update} }} }} new Phaser.Game({{type: Phaser.AUTO, width: 800, height: 600, parent: 'game', physics: {{default:'arcade'}}, scale: {{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH}}, scene: [Boot, Play]}}});"
+        
+        html = f"<!DOCTYPE html><html><head>{head}</head><body><div id='game'></div><script src='https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js'></script><script>{full_js}</script></body></html>"
+        
+        self.session.set_shared("full_html", html)
+        self.session.add_artifact("index.html", html)
+        
+        # SELF-DEBUG LOOP
+        tester = next((a for a in self.session.agents.values() if isinstance(a, TesterAgent)), None)
+        for i in range(3):
+            if tester:
+                result = await tester.run("Debug full_html")
+                if "[PASS]" in result:
+                    self.speak("Self-debug: PASS.")
+                    break
+                fix_prompt = f"Fix bug: {result} in code: {html[:500]}... Output fixed HTML JSON: {{\"fixed\": \"<html>...\"}}"
+                fixed = await self.generate_response(fix_prompt)
+                html = fixed.get("fixed", html)
+                self.session.set_shared("full_html", html)
+                self.session.add_artifact("index.html", html)
+                self.speak(f"Self-debug iteration {i+1}: Fixed {result}.")
+        
+        self.speak("Code deployed – self-debug complete.")
 
-        # --- BULLETPROOF BASE TEMPLATE ---
-            base_html = """<!DOCTYPE html>
-<html><head><title>{vibe}</title>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<style>body{margin:0;overflow:hidden;background:#111}</style>
-</head><body><div id="game"></div>
-<script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
-<script>
-class Boot extends Phaser.Scene {
-  constructor() { super('Boot'); }
-  create() { this.scene.start('Play'); }
-}
-class Play extends Phaser.Scene {
-  constructor() { super('Play'); }
-  preload() {}
-  create() {
-    this.cameras.main.setBackgroundColor('#111');
-    this.score = 0;
-    this.scoreText = this.add.text(16, 16, 'Score: 0', {fontSize:'24px',color:'#fff'});
-    // VIBE_INSERT
-  }
-  update() {
-    // VIBE_UPDATE
-  }
-}
-new Phaser.Game({
-  type: Phaser.AUTO, width: 800, height: 600, parent: 'game',
-  physics: {default:'arcade'}, scale: {mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH},
-  scene: [Boot, Play]
-});
-</script></body></html>"""
+    async def run_iteration(self, instruction: str, original_vibe: str):
+        html = self.session.get_shared("full_html") or ""
+        prompt = f"Refine '{instruction}' in: {html}. Output fixed HTML JSON: {{\"fixed\": \"<html>...\"}}"
+        fixed = await self.generate_response(prompt)
+        new_html = fixed.get("fixed", html)
+        self.session.set_shared("full_html", new_html)
+        self.session.add_artifact("index.html", new_html)
+        self.speak("Iteration applied.")
 
-        # --- VIBE CODE SNIPPETS ---
-            insert = ""
-            update = ""
-
-            if is_cookie:
-                insert = """
-    this.player = this.physics.add.sprite(400, 500, null).setSize(30,20).setTint(0xD2691E);
-    this.add.graphics().fillStyle(0x8B4513).fillCircle(400,500,15);
-    this.cursors = this.input.keyboard.createCursorKeys();
-    this.goal = this.add.rectangle(400, 50, 60, 60, 0x00ff00).setStrokeStyle(4, 0xffffff);
-    this.physics.add.existing(this.goal);
-    this.physics.add.collider(this.player, this.goal, () => {
-      this.score += 10; this.scoreText.setText('Score: '+this.score);
-      if (this.score >= 30) this.scene.start('Boot');
-    });""".strip()
-                update = """
-    if (this.cursors.left.isDown) this.player.x -= 5;
-    if (this.cursors.right.isDown) this.player.x += 5;
-    if (this.player.x < 0 || this.player.x > 800) this.scene.start('Boot');""".strip()
-
-            elif is_penguin:
-                insert = """
-    this.player = this.physics.add.sprite(100, 100, null).setSize(40,30).setTint(0xffffff);
-    this.add.graphics().fillStyle(0x000000).fillCircle(100,100,20);
-    this.physics.world.gravity.y = 300;
-    this.ground = this.add.rectangle(400, 580, 800, 40, 0x87CEEB);
-    this.physics.add.existing(this.ground, true);
-    this.coins = this.physics.add.group();
-    for(let i=0;i<5;i++) {
-      let c = this.add.circle(200+i*120, 400, 15, 0xffd700);
-      this.physics.add.existing(c);
-      this.coins.add(c);
-    }
-    this.physics.add.collider(this.player, this.ground);
-    this.physics.add.overlap(this.player, this.coins, (p,c) => { c.destroy(); this.score+=1; this.scoreText.setText('Score: '+this.score); });""".strip()
-                update = """
-    if (this.input.activePointer.isDown && this.player.body.onFloor()) {
-      this.player.setVelocityY(-400);
-    }""".strip()
-
-            elif is_goose:
-                insert = """
-    this.player = this.physics.add.sprite(400, 300, null).setSize(50,40).setTint(0xffffff);
-    this.add.graphics().fillStyle(0xffff00).fillRect(380, 280, 40, 40);
-    this.input.on('pointerdown', () => {
-      this.add.text(400, 200, 'HONK!', {fontSize:'48px',color:'#ff0'}).setOrigin(0.5);
-      this.time.delayedCall(500, () => this.scene.start('Boot'));
-    });""".strip()
-
-            elif is_book:
-                insert = """
-    this.pages = ['Page 1', 'Page 2', 'The End'];
-    this.current = 0;
-    this.text = this.add.text(400, 300, this.pages[0], {fontSize:'32px',color:'#fff'}).setOrigin(0.5);
-    this.input.on('pointerdown', () => {
-      this.current++;
-      if (this.current >= this.pages.length) this.scene.start('Boot');
-      else this.text.setText(this.pages[this.current]);
-    });""".strip()
-
-            else:
-                insert = f"this.add.text(400,300,'VIBE: {vibe}',{{fontSize:'32px',color:'#0f0'}}).setOrigin(0.5);"
-
-        # --- FINAL ASSEMBLY + ESCAPING ---
-            html = base_html
-            html = html.replace("// VIBE_INSERT", insert)
-            html = html.replace("// VIBE_UPDATE", update)
-            html = html.replace("{vibe}", vibe)  # title
-            html = html.replace("\n", "\\n").replace('"', '\\"')
-
-            self.session.add_artifact("index.html", html)
-            self.speak("Game deployed – vibe_insert/vibe_update GONE.")
 # ------------------------------------------------------------------
-# TesterAgent
+# TesterAgent – Simulated Debug + Gemini Review
 # ------------------------------------------------------------------
 class TesterAgent(Agent):
     async def run(self, prompt: str, instructions: str | None = None) -> str:
-        if not self.session.get_artifacts():
-            r = "[BUG] No artifacts."
-            self.speak(r)
-            return r
-
-        html = self.session.get_artifact_content("index.html") or ""
+        html = self.session.get_shared("full_html") or ""
         if not html:
-            r = "[BUG] Missing index.html"
-            self.speak(r)
-            return r
+            return "[BUG] No full_html in shared state"
 
+        # String checks
         checks = {
-            "Phaser CDN": "phaser" in html.lower(),
-            "Pixi CDN": "pixi" in html.lower(),
-            "Phaser.Game": "new phaser.game" in html.lower(),
+            "Phaser CDN": "phaser" in html,
+            "Scene Class": "class Play extends Phaser.Scene" in html,
+            "new Phaser.Game": "new Phaser.Game" in html,
+            "create()": "create() {" in html,
             "update()": "update() {" in html,
         }
 
-        history = "\n".join(f"- {m.agent_name}: {m.text[:50]}..." for m in self.session.messages[-5:])
-
-        tester_prompt = f"""
-SCAN index.html for RUNTIME ERRORS.
-Checks: {json.dumps(checks)}
-History: {history}
-
-[BUG] only if:
-- Missing CDNs
-- No `new Phaser.Game`
-- No `update()`
-
-Ignore vibe. [PASS] if playable.
-Response: [PASS|BUG] + reason.
-"""
-
-        resp = await self.generate_response(tester_prompt)
-        self.speak(resp)
-        return resp
-
+        # Gemini simulate
+        debug_prompt = f"Simulate errors in this HTML: {html[:1000]}... Checks: {checks}. Output [PASS|BUG] + reason."
+        result = await self.generate_response(debug_prompt)
+        
+        self.speak(result)
+        return result
 # ------------------------------------------------------------------
-# Designer / Writer
+# DesignerAgent – Output JSON Sprites to Shared
 # ------------------------------------------------------------------
 class DesignerAgent(Agent):
     async def run(self, prompt: str, instructions: str | None = None):
         ack = await self.generate_response(f"Design task: {prompt}")
         self.speak(ack)
         await self.think(2)
+        
+        # Generate SVG sprites as JSON
+        sprite_prompt = f"Generate SVG for '{prompt}'. Output JSON: {{\"sprites\": {{\"fish\": \"<svg>...</svg>\"}}}} – procedural, Phaser-ready."
+        sprites = await self.generate_response(sprite_prompt)
+        self.session.set_shared("sprites", sprites)
+        self.speak(f"Sprites stored: {sprites[:100]}...")
+        
         ideas = await self.generate_response(f"Visuals for '{prompt}'. Use Phaser/Pixi particles.")
         self.speak(ideas)
 
 
+# ------------------------------------------------------------------
+# WriterAgent – Output JSON Script to Shared
+# ------------------------------------------------------------------
 class WriterAgent(Agent):
     async def run(self, prompt: str, instructions: str | None = None):
         full = f"{prompt}. {instructions or ''}"
+        story_prompt = f"Story for '{full}'. Output JSON: {{\"script\": [{{\"speaker\": \"Narrator\", \"text\": \"...\"}}]}} – structured dialogue."
+        script = await self.generate_response(story_prompt)
+        self.session.set_shared("script", script)
+        self.speak(f"Script stored: {script[:100]}...")
+        
         story = await self.generate_response(full)
         self.speak(story)
 

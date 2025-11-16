@@ -40,16 +40,29 @@ class Session:
         self.status = "PENDING"  # PENDING -> RUNNING -> COMPLETED -> FAILED
         self.messages: List[Message] = []
         self.artifacts: List[str] = []
+        self.shared_state = {}
+        self.shared_state = {}  # AgentOS Lite: Shared memory for code, sprites, script
         self.agents: Dict[str, Agent] = {}
         self.root_agent_id: str | None = None
         
         os.makedirs(self.artifact_path, exist_ok=True)
         self._prepare_agents(workflow_data)
 
-    def _prepare_agents(self, workflow_data: Dict[str, Any]):
-        """Parses workflow data and instantiates agent objects."""
-        nodes = workflow_data.get('nodes', [])
-        edges = workflow_data.get('edges', [])
+        def get_shared(self, key: str):
+            """Get from shared state."""
+            return self.shared_state.get(key)
+
+        def set_shared(self, key: str, value: any):
+            """Set in shared state."""
+            self.shared_state[key] = value
+
+        def get_artifacts(self) -> List[str]:
+            return self.artifacts
+       
+        def _prepare_agents(self, workflow_data: Dict[str, Any]):
+            """Parses workflow data and instantiates agent objects."""
+            nodes = workflow_data.get('nodes', [])
+            edges = workflow_data.get('edges', [])
 
         # 1. Instantiate all agents
         for node in nodes:

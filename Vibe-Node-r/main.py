@@ -19,8 +19,8 @@ app.config['ARTIFACT_FOLDER'] = os.path.join(os.getcwd(), 'artifacts')
 # We'll initialize it here once at startup for robustness.
 try:
     # The project and location are usually available as environment variables in Cloud Run.
-    project_id = os.environ.get('GOOGLE_CLOUD_PROJECT')
-    location = os.environ.get('GOOGLE_CLOUD_REGION') # e.g., 'europe-west4'
+    project_id = os.environ.get('cloud-run-hackathon-477510')
+    location = os.environ.get('europe-west4') # e.g., 'europe-west4'
     
     if not project_id or not location:
         print("⚠️  GOOGLE_CLOUD_PROJECT or GOOGLE_CLOUD_REGION not set. vertexai.init() will try to infer them.")
