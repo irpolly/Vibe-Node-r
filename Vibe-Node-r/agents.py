@@ -68,6 +68,12 @@ class CoderAgent(Agent):
         create_escaped = create.replace('\\', '\\\\').replace('{', '{{').replace('}', '}}')
         update_escaped = update.replace('\\', '\\\\').replace('{', '{{').replace('}', '}}')
 
+                # --- FINAL ASSEMBLY: .format() + PRE-ESCAPE (NO F-STRINGS) ---
+        # Step 1: Escape backslashes and braces in Gemini output
+        create_safe = create.replace('\\', '\\\\').replace('{', '{{').replace('}', '}}')
+        update_safe = update.replace('\\', '\\\\').replace('{', '{{').replace('}', '}}')
+
+        # Step 2: Assemble with .format() – no f-string, no backslash errors
         full_js = (
             "class Play extends Phaser.Scene {{\n"
             "  constructor() {{ super('Play'); }}\n"
@@ -85,7 +91,27 @@ class CoderAgent(Agent):
             "  scene: [Boot, Play]\n"
             "}};\n"
             "new Phaser.Game(config);"
-            ).format(create_escaped, update_escaped)
+        ).format(create_safe, update_safe)
+
+        # Step 3: Final HTML
+        html = (
+            "<!DOCTYPE html>\n"
+            "<html>\n"
+            "<head>\n"
+            "  <title>{}</title>\n"
+            "  <meta charset=\"utf-8\">\n"
+            "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+            "  <style>body{{margin:0;overflow:hidden;background:#111}}</style>\n"
+            "</head>\n"
+            "<body>\n"
+            "  <div id=\"game\"></div>\n"
+            "  <script src=\"https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js\"></script>\n"
+            "  <script>\n"
+            "{}"
+            "  </script>\n"
+            "</body>\n"
+            "</html>"
+        ).format(vibe, full_js)
 
         html = f"<!DOCTYPE html><html><head>{head}</head><body><div id='game'></div><script src='https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js'></script><script>{full_js}</script></body></html>"
         
