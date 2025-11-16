@@ -22,34 +22,21 @@ class Message:
 
 # --- Session Class ---
 class Session:
-    """
-    Manages a single workflow execution, including its state, agents,
-    and generated artifacts. Acts as a virtual environment.
-    """
-    AGENT_MAP = {
-        "Coder Agent": CoderAgent,
-        "Designer Agent": DesignerAgent,
-        "Tester Agent": TesterAgent,
-        "Writer Agent": WriterAgent,
-        "Manager Agent": ManagerAgent,
-    }
-
     def __init__(self, session_id: str):
         self.id = session_id
         self.messages: List[Message] = []
         self.artifacts: List[str] = []
-        self.shared_state = {}  # AgentOS Lite: Shared memory
-        self._prepare_agents()  # Restore agent init
+        self.shared_state = {}
+        self._prepare_agents()  # ← agents created here
 
     def _prepare_agents(self):
-        """Initialize all agents for this session."""
         from agents import ManagerAgent, CoderAgent, DesignerAgent, TesterAgent, WriterAgent
         self.agents = {
-            "manager": ManagerAgent("manager", {"role": "Manager Agent"}, self),
-            "writer": WriterAgent("writer", {"role": "Writer Agent"}, self),
-            "designer": DesignerAgent("designer", {"role": "Designer Agent"}, self),
-            "coder": CoderAgent("coder", {"role": "Coder Agent"}, self),
-            "tester": TesterAgent("tester", {"role": "Tester Agent"}, self),
+            "manager": ManagerAgent("manager", {"role": "Manager"}, self),
+            "writer": WriterAgent("writer", {"role": "Writer"}, self),
+            "designer": DesignerAgent("designer", {"role": "Designer"}, self),
+            "coder": CoderAgent("coder", {"role": "Coder"}, self),
+            "tester": TesterAgent("tester", {"role": "Tester"}, self),
         }
 
     def get_shared(self, key: str):
