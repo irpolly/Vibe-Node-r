@@ -27,7 +27,11 @@ class Session:
         self.messages: List[Message] = []
         self.artifacts: List[str] = []
         self.shared_state = {}
-        self._prepare_agents()  # ← agents created here
+        self.status = "created"  
+        self._prepare_agents()
+
+    def set_status(self, status: str):
+        self.status = status
 
     def _prepare_agents(self):
         from agents import ManagerAgent, CoderAgent, DesignerAgent, TesterAgent, WriterAgent
