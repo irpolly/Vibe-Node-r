@@ -66,23 +66,24 @@ class CoderAgent(Agent):
         
         # Assemble
         full_js = (
-            f"class Play extends Phaser.Scene\n {{{"
-            f"  constructor() {{ super('Play'); }}\n"
-            f"  preload() {{}}\n"
-            f"  create() {{ {create} }}\n"
-            f"  update() {{ {update} }}\n"
-            f"}}};\n"
-            f"const config = \n{{{"
-            f"  type: Phaser.AUTO,\n"
-            f"  width: 800,\n"
+            f"class Play extends Phaser.Scene {{{\n"
+                f"  constructor() {{ super('Play'); }}\n"
+                f"  preload() {{}}\n"
+                f"  create() {{ {create} }}\n"
+                f"  update() {{ {update} }}\n"
+                f"}}};\n"
+                f"const config = {{{\n"
+                f"  type: Phaser.AUTO,\n"
+                    f"  width: 800,\n"
             f"  height: 600,\n"
-            f"  parent: 'game',\n"
-            f"  physics: {{ default: 'arcade' }},\n"
-            f"  scale: {{ mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH }},\n"
-            f"  scene: [Boot, Play]\n"
-            f"}};\n"
-            f"new Phaser.Game(config);"
-            )               
+                f"  parent: 'game',\n"
+                f"  physics: {{ default: 'arcade' }},\n"
+                f"  scale: {{ mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH }},\n"
+                f"  scene: [Boot, Play]\n"
+                f"}};\n"
+                f"new Phaser.Game(config);"
+)         
+
         html = f"<!DOCTYPE html><html><head>{head}</head><body><div id='game'></div><script src='https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js'></script><script>{full_js}</script></body></html>"
         
         self.session.set_shared("full_html", html)
