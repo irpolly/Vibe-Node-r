@@ -39,15 +39,11 @@ class Session:
         self.messages: List[Message] = []
         self.artifacts: List[str] = []
         self.shared_state = {}  # AgentOS Lite: Shared memory
+        self._prepare_agents()  # Restore agent init
 
-        # --- RESTORE MISSING METHOD CALL ---
-        self._prepare_agents()
-
-    # --- ADD THIS METHOD IF MISSING ---
     def _prepare_agents(self):
         """Initialize all agents for this session."""
-        from agents import ManagerAgent, CoderAgent, DesignerAgent, TesterAgent, WriterAgent, Agent
-        
+        from agents import ManagerAgent, CoderAgent, DesignerAgent, TesterAgent, WriterAgent
         self.agents = {
             "manager": ManagerAgent("manager", {"role": "Manager Agent"}, self),
             "writer": WriterAgent("writer", {"role": "Writer Agent"}, self),
@@ -55,16 +51,14 @@ class Session:
             "coder": CoderAgent("coder", {"role": "Coder Agent"}, self),
             "tester": TesterAgent("tester", {"role": "Tester Agent"}, self),
         }
+
     def get_shared(self, key: str):
+        """Get from shared state."""
         return self.shared_state.get(key)
 
     def set_shared(self, key: str, value: any):
+        """Set in shared state."""
         self.shared_state[key] = value
-
-    def add_artifact(self, name: str, content: str):
-        self.artifacts.append(name)
-        # Optional: store content in shared_state too
-        self.set_shared(f"artifact_{name}", content)
 
         # 1. Instantiate all agents
         for node in nodes:
@@ -96,6 +90,29 @@ class Session:
     def add_message(self, agent_name: str, text: str):
         """Adds a message to the session's log."""
         self.messages.append(Message(agent_name, text))
+
+    def add_artifact(self, filename: str, content: str):
+        """Saves a file artifact and logs it."""
+        try:
+            filepath = os.path.join(self.artifact_path, filename)
+            # If content is None, remove the file if it exists
+            if content is None:
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+                    if filename in self.artifacts:
+                        self.artifacts.remove(filename)
+                    print(f"Artifact '{filename}' deleted for session {self.session_id}")
+                return
+
+            # Otherwise, write or overwrite the file
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            if filename not in self.artifacts:
+                self.artifacts.append(filename)
+            print(f"Artifact '{filename}' created/updated for session {self.session_id}")
+        except Exception as e:
+            print(f"Error managing artifact for session {self.session_id}: {e}")
 
     def get_artifact_content(self, filename: str) -> str | None:
         """Reads the content of a specific artifact file."""
