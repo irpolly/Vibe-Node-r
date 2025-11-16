@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Dict, Any
 import vertexai
 vertexai.init(
     project="cloud-run-hackathon-477510",
-    project_number="85229041043",
     location="europe-west4"
 )
 
