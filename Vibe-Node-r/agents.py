@@ -47,7 +47,7 @@ class Agent:
 # CoderAgent – JSON-ONLY, BULLETPROOF
 # ------------------------------------------------------------------
 class CoderAgent(Agent):
-        # --------------------------------------------------------------
+    # --------------------------------------------------------------
     # CoderAgent – FINAL: TEMPLATE + FILL-IN-THE-BLANK ONLY
     # --------------------------------------------------------------
     async def run_finalization(self, vibe: str, instructions: str | None = None):
