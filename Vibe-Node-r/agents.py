@@ -47,18 +47,18 @@ class Agent:
 # ------------------------------------------------------------------
 class CoderAgent(Agent):
         async def run_finalization(self, vibe: str, instructions: str | None = None):
-        self.speak(f"Deploying unbreakable game for: '{vibe}'.")
-        await self.think(1)
+            self.speak(f"Deploying unbreakable game for: '{vibe}'.")
+            await self.think(1)
 
         # --- KEYWORD DETECTION ---
-        keywords = vibe.lower()
-        is_cookie = any(w in keywords for w in ['cookie', 'biscuit', 'crumb', 'stealth'])
-        is_penguin = any(w in keywords for w in ['penguin', 'slide', 'icy', 'hill', 'coin'])
-        is_goose = any(w in keywords for w in ['goose', 'honk', 'untitled'])
-        is_book = any(w in keywords for w in ['book', 'page', 'story', 'sentient'])
+            keywords = vibe.lower()
+            is_cookie = any(w in keywords for w in ['cookie', 'biscuit', 'crumb', 'stealth'])
+            is_penguin = any(w in keywords for w in ['penguin', 'slide', 'icy', 'hill', 'coin'])
+            is_goose = any(w in keywords for w in ['goose', 'honk', 'untitled'])
+            is_book = any(w in keywords for w in ['book', 'page', 'story', 'sentient'])
 
         # --- BULLETPROOF BASE TEMPLATE ---
-        base_html = """<!DOCTYPE html>
+            base_html = """<!DOCTYPE html>
 <html><head><title>{vibe}</title>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>body{margin:0;overflow:hidden;background:#111}</style>
@@ -90,11 +90,11 @@ new Phaser.Game({
 </script></body></html>"""
 
         # --- VIBE CODE SNIPPETS ---
-        insert = ""
-        update = ""
+            insert = ""
+            update = ""
 
-        if is_cookie:
-            insert = """
+            if is_cookie:
+                insert = """
     this.player = this.physics.add.sprite(400, 500, null).setSize(30,20).setTint(0xD2691E);
     this.add.graphics().fillStyle(0x8B4513).fillCircle(400,500,15);
     this.cursors = this.input.keyboard.createCursorKeys();
@@ -104,13 +104,13 @@ new Phaser.Game({
       this.score += 10; this.scoreText.setText('Score: '+this.score);
       if (this.score >= 30) this.scene.start('Boot');
     });""".strip()
-            update = """
+                update = """
     if (this.cursors.left.isDown) this.player.x -= 5;
     if (this.cursors.right.isDown) this.player.x += 5;
     if (this.player.x < 0 || this.player.x > 800) this.scene.start('Boot');""".strip()
 
-        elif is_penguin:
-            insert = """
+            elif is_penguin:
+                insert = """
     this.player = this.physics.add.sprite(100, 100, null).setSize(40,30).setTint(0xffffff);
     this.add.graphics().fillStyle(0x000000).fillCircle(100,100,20);
     this.physics.world.gravity.y = 300;
@@ -124,13 +124,13 @@ new Phaser.Game({
     }
     this.physics.add.collider(this.player, this.ground);
     this.physics.add.overlap(this.player, this.coins, (p,c) => { c.destroy(); this.score+=1; this.scoreText.setText('Score: '+this.score); });""".strip()
-            update = """
+                update = """
     if (this.input.activePointer.isDown && this.player.body.onFloor()) {
       this.player.setVelocityY(-400);
     }""".strip()
 
-        elif is_goose:
-            insert = """
+            elif is_goose:
+                insert = """
     this.player = this.physics.add.sprite(400, 300, null).setSize(50,40).setTint(0xffffff);
     this.add.graphics().fillStyle(0xffff00).fillRect(380, 280, 40, 40);
     this.input.on('pointerdown', () => {
@@ -138,8 +138,8 @@ new Phaser.Game({
       this.time.delayedCall(500, () => this.scene.start('Boot'));
     });""".strip()
 
-        elif is_book:
-            insert = """
+            elif is_book:
+                insert = """
     this.pages = ['Page 1', 'Page 2', 'The End'];
     this.current = 0;
     this.text = this.add.text(400, 300, this.pages[0], {fontSize:'32px',color:'#fff'}).setOrigin(0.5);
@@ -149,18 +149,18 @@ new Phaser.Game({
       else this.text.setText(this.pages[this.current]);
     });""".strip()
 
-        else:
-            insert = f"this.add.text(400,300,'VIBE: {vibe}',{{fontSize:'32px',color:'#0f0'}}).setOrigin(0.5);"
+            else:
+                insert = f"this.add.text(400,300,'VIBE: {vibe}',{{fontSize:'32px',color:'#0f0'}}).setOrigin(0.5);"
 
         # --- FINAL ASSEMBLY + ESCAPING ---
-        html = base_html
-        html = html.replace("// VIBE_INSERT", insert)
-        html = html.replace("// VIBE_UPDATE", update)
-        html = html.replace("{vibe}", vibe)  # title
-        html = html.replace("\n", "\\n").replace('"', '\\"')
+            html = base_html
+            html = html.replace("// VIBE_INSERT", insert)
+            html = html.replace("// VIBE_UPDATE", update)
+            html = html.replace("{vibe}", vibe)  # title
+            html = html.replace("\n", "\\n").replace('"', '\\"')
 
-        self.session.add_artifact("index.html", html)
-        self.speak("Game deployed – vibe_insert/vibe_update GONE.")
+            self.session.add_artifact("index.html", html)
+            self.speak("Game deployed – vibe_insert/vibe_update GONE.")
 # ------------------------------------------------------------------
 # TesterAgent
 # ------------------------------------------------------------------
