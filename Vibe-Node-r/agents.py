@@ -65,25 +65,27 @@ class CoderAgent(Agent):
         update = await self.generate_response(update_prompt)
         
         # Assemble
+        create_escaped = create.replace('\\', '\\\\').replace('{', '{{').replace('}', '}}')
+        update_escaped = update.replace('\\', '\\\\').replace('{', '{{').replace('}', '}}')
+
         full_js = (
-            f"class Play extends Phaser.Scene {{{\n"
-                f"  constructor() {{ super('Play'); }}\n"
-                f"  preload() {{}}\n"
-                f"  create() {{ {create} }}\n"
-                f"  update() {{ {update} }}\n"
-                f"}}};\n"
-            f"const config = {{{\n"
-                f"  type: Phaser.AUTO,\n"
-                f"  width: 800,\n"
-                f"  height: 600,\n"
-                f"  parent: 'game',\n"
-                f"  physics: {{ default: 'arcade' }},\n"
-                f"  scale: {{ mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH }},\n"
-                f"  scene: [Boot, Play]\n"
-                f"}};\n"
-                f"new Phaser.Game(config);"
-                f"}"
-            )         
+            "class Play extends Phaser.Scene {{\n"
+            "  constructor() {{ super('Play'); }}\n"
+            "  preload() {{}}\n"
+            "  create() {{ {} }}\n"
+            "  update() {{ {} }}\n"
+            "}};\n"
+            "const config = {{\n"
+            "  type: Phaser.AUTO,\n"
+            "  width: 800,\n"
+            "  height: 600,\n"
+            "  parent: 'game',\n"
+            "  physics: {{ default: 'arcade' }},\n"
+            "  scale: {{ mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH }},\n"
+            "  scene: [Boot, Play]\n"
+            "}};\n"
+            "new Phaser.Game(config);"
+            ).format(create_escaped, update_escaped)
 
         html = f"<!DOCTYPE html><html><head>{head}</head><body><div id='game'></div><script src='https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js'></script><script>{full_js}</script></body></html>"
         
