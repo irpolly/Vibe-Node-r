@@ -47,18 +47,18 @@ class Agent:
 # ------------------------------------------------------------------
 # CoderAgent – JSON-ONLY, BULLETPROOF
 # ------------------------------------------------------------------
-class CoderAgent(Agent):
     async def run_finalization(self, vibe: str, instructions: str | None = None):
         self.speak(f"Building Phaser+PixiJS for: '{vibe}'.")
         await self.think(2)
 
+        # Slim context – last 3 messages only
         recent_ctx = "\n".join(
-            f"- {m.agent_name}: {m.text[:120]}..."
+            f"- {m.agent_name}: {m.text[:100]}..."
             for m in self.session.messages[-3:]
             if m.agent_name != self.role
         ) or "No context."
 
-        # BULLETPROOF TEMPLATE – Gemini CANNOT break this
+        # Pristine template with explicit Phaser.Scene
         template = """
 <!DOCTYPE html>
 <html>
@@ -66,66 +66,84 @@ class CoderAgent(Agent):
 <title>{vibe}</title>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<style>body{margin:0;overflow:hidden;background:#000}</style>
+<style>body {{margin:0; overflow:hidden; background:#000;}}</style>
 </head>
 <body>
 <div id="game-container"></div>
 <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pixi.js@8.14.1/dist/pixi.min.js"></script>
 <script>
-class BootScene extends Phaser.Scene {
-    constructor() { super('Boot'); }
-    create() { this.scene.start('Main'); }
-}
-class MainScene extends Phaser.Scene {
-    constructor() { super('Main'); }
-    preload() { }
-    create() {
-        this.add.text(400, 300, 'VIBE: {vibe}\\nLoading...', {fontSize: '32px', color: '#fff'}).setOrigin(0.5);
-        // VIBE CODE HERE
-    }
-    update() { }
-}
-const config = {
+const config = {{
     type: Phaser.AUTO,
     width: 800,
     height: 600,
     parent: 'game-container',
-    physics: { default: 'arcade' },
-    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+    physics: {{ default: 'arcade' }},
+    scale: {{ mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH }},
     scene: [BootScene, MainScene]
-};
-new Phaser.Game(config);
+}};
+class BootScene extends Phaser.Scene {{
+    constructor() {{ super('Boot'); }}
+    preload() {{}}
+    create() {{ this.scene.start('Main'); }}
+    update() {{}}
+}}
+class MainScene extends Phaser.Scene {{
+    constructor() {{ super('Main'); }}
+    preload() {{ /* VIBE ASSETS */ }}
+    create() {{ /* VIBE IMPLEMENTATION */ }}
+    update() {{ /* GAME LOOP */ }}
+}}
+const game = new Phaser.Game(config);
 </script>
 </body>
 </html>
-""".format(vibe=vibe)
+""".replace('{{', '{{{').replace('}}', '}}}')
 
-        prompt = f"""
-You are a JSON-only generator. Output EXACTLY: {{"index.html":"..."}} 
+        prompt = r"""
+You are a JSON-only generator. Output EXACTLY: {{"index.html":"..."}}.
 
 Vibe: '{vibe}'
-Context: {recent_ctx}
+Recent context: {recent_ctx}
 
-TASK: Replace the comment "// VIBE CODE HERE" with Phaser code that implements the vibe.
-Use only Phaser.Graphics, this.add.text(), this.physics.add.sprite(), etc.
-Add touch/mouse controls, win/lose, score.
-Keep it under 100 lines.
+TASK: Modify the template below to match the vibe. Use Phaser.Graphics for shapes/colors. Add touch/mouse controls (this.input.on('pointerdown')), win/lose, score. Procedural – no external assets.
+
+TEMPLATE (fill in preload/create/update):
+{template}
 
 RULES:
-- SINGLE LINE JS: use \\n for breaks, \" for quotes
-- NO external assets
-- NO markdown, NO ```
+1. SINGLE FILE. Inline everything.
+2. Keep CDNs and config AS-IS.
+3. JS SINGLE LINE – \\n for breaks, \" for quotes.
+4. Mobile-ready: use this.input.on('pointerdown').
+5. 60s playable loop matching vibe.
+6. NO markdown, NO ```.
+7. Keep class BootScene and MainScene structure INTACT.
 
-VALID JSON ONLY.
-"""
+VALID JSON ONLY – no truncation.
+""".format(vibe=vibe, recent_ctx=recent_ctx, template=template)
 
-        files = await self.generate(prompt)
+        files = await self._generate(prompt)
         for name, content in files.items():
-            # FINAL FIX: Ensure script is closed + escape newlines
-            content = content.replace('\n', '\\n').replace('\r', '')
-            content = content.replace('</script>', '</script>\\n</body>\\n</html>')
+            # Post-process: Ensure script integrity
+            if '<script>' in content and '</script>' not in content:
+                content += '\\n</script>\\n</body>\\n</html>'
+            if 'class MainScene' not in content:
+                content = content.replace(
+                    '</script>',
+                    'class MainScene extends Phaser.Scene {{ constructor() {{ super("Main"); }} preload() {{}} create() {{}} update() {{}} }}\\n</script>'
+                )
+            # Validate JS snippet
+            script_start = content.find('<script>')
+            script_end = content.find('</script>')
+            if script_start != -1 and script_end != -1:
+                script = content[script_start + 8:script_end]
+                if not ('Phaser.Scene' in script and 'new Phaser.Game' in script):
+                    print(f"[CODER DEBUG] Invalid JS detected – forcing fallback script")
+                    content = template.format(vibe=vibe).replace('\n', '\\n')
+
             self.session.add_artifact(name, content)
-        self.speak("Build deployed – scene classes enforced.")
+        self.speak("Build ready – script validated.")
 # ------------------------------------------------------------------
 # TesterAgent
 # ------------------------------------------------------------------
