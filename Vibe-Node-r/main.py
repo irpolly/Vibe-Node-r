@@ -8,6 +8,9 @@ from session import Session
 import uuid
 import threading
 import vertexai
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # --- App Initialization ---
 app = Flask(__name__, static_folder='build', static_url_path='')
@@ -42,12 +45,10 @@ try:
     else:
         vertexai.init(project=project_id, location=location)
         print(f"✅ Vertex AI initialized successfully for project: {project_id} in location: {location}")
-
+        logger.info("✅ Vertex AI initialized successfully")
 except Exception as e:
-    # This will print a clear error to the logs if initialization fails, which is critical for debugging "Service Unavailable" errors.
-    print(f"❌ FATAL: Failed to initialize Vertex AI: {e}")
-    # This is a non-recoverable error, so we log it prominently. The app will likely fail health checks.
-
+    logger.error(f"❌ FATAL: Failed to initialize Vertex AI: {e}")
+    raise  # Re-raise to crash visibly in logs
 
 # In-memory storage for active sessions. In a production environment,
 # this would be replaced with a database like Redis or Firestore.
@@ -195,6 +196,6 @@ def serve(path):
         return send_from_directory(app.static_folder, 'index.html')
 
 if __name__ == '__main__':
-    if not os.path.exists(app.config['ARTIFACT_FOLDER']):
-        os.makedirs(app.config['ARTIFACT_FOLDER'])
-    app.run(debug=True, port=5000)
+    port = int(os.environ.get('PORT', 8080))
+    logger.info(f"Starting server on 0.0.0.0:{port}")
+    app.run(host='0.0.0.0', port=port, debug=True)  # For local testing
