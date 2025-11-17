@@ -67,16 +67,10 @@ class CoderAgent(Agent):
         update_json_str = await self.generate_response(update_prompt)
         update = json.loads(update_json_str).get("update", "")
         
-        # Assemble
-        create_escaped = create.replace('\\', '\\\\').replace('{', '{{').replace('}', '}}')
-        update_escaped = update.replace('\\', '\\\\').replace('{', '{{').replace('}', '}}')
-
-                # --- FINAL ASSEMBLY: .format() + PRE-ESCAPE (NO F-STRINGS) ---
-        # Step 1: Escape backslashes and braces in Gemini output
+        # Assemble with .format() – no f-string, no backslash errors
         create_safe = create.replace('\\', '\\\\').replace('{', '{{').replace('}', '}}')
         update_safe = update.replace('\\', '\\\\').replace('{', '{{').replace('}', '}}')
 
-        # Step 2: Assemble with .format() – no f-string, no backslash errors
         full_js = (
             "class Play extends Phaser.Scene {{\n"
             "  constructor() {{ super('Play'); }}\n"
@@ -96,7 +90,7 @@ class CoderAgent(Agent):
             "new Phaser.Game(config);"
         ).format(create_safe, update_safe)
 
-        # Step 3: Final HTML
+        # Final HTML (use formatted version with vibe in title + fixed style)
         html = (
             "<!DOCTYPE html>\n"
             "<html>\n"
@@ -116,12 +110,9 @@ class CoderAgent(Agent):
             "</html>"
         ).format(vibe, full_js)
 
-        html = f"<!DOCTYPE html><html><head>{head}</head><body><div id='game'></div><script src='https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js'></script><script>{full_js}</script></body></html>"
-        
         self.session.set_shared("full_html", html)
         self.session.add_artifact("index.html", html)
-        
-        # SELF-DEBUG LOOP
+
         # SELF-DEBUG LOOP
         tester = next((a for a in self.session.agents.values() if isinstance(a, TesterAgent)), None)
         for i in range(3):
@@ -137,7 +128,7 @@ class CoderAgent(Agent):
             self.session.set_shared("full_html", html)
             self.session.add_artifact("index.html", html)
             self.speak(f"Self-debug iteration {i+1}: Fixed {result}.")
-        
+    
         self.speak("Code deployed – self-debug complete.")
 
     async def run_iteration(self, instruction: str, original_vibe: str):
