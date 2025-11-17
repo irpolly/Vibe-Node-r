@@ -23,7 +23,7 @@ class Message:
 # --- Session Class ---
 class Session:
     def __init__(self, session_id: str):
-        self.id = session_id
+        self.session_id = session_id
         self.messages: List[Message] = []
         self.artifacts: List[str] = []
         self.shared_state = {}
