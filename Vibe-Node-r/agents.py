@@ -56,13 +56,16 @@ class CoderAgent(Agent):
         
         # Slim prompt – chunked to avoid truncation
         head_prompt = f"HTML head for '{vibe}' – title, viewport, style. JSON: {{\"head\": \"<head>...</head>\"}}"
-        head = await self.generate_response(head_prompt)
+        head_json_str = await self.generate_response(head_prompt)
+        head = json.loads(head_json_str).get("head", "")  # Parse JSON, default to empty
         
         create_prompt = f"Phaser create() for '{vibe}'. Use sprites: {sprites}. Add controls, score. JSON: {{\"create\": \"this.add...\"}}"
-        create = await self.generate_response(create_prompt)
+        create_json_str = await self.generate_response(create_prompt)
+        create = json.loads(create_json_str).get("create", "")  # Parse
         
         update_prompt = f"Phaser update() for '{vibe}'. Game loop, collisions. JSON: {{\"update\": \"if (cursors...\"}}"
-        update = await self.generate_response(update_prompt)
+        update_json_str = await self.generate_response(update_prompt)
+        update = json.loads(update_json_str).get("update", "")
         
         # Assemble
         create_escaped = create.replace('\\', '\\\\').replace('{', '{{').replace('}', '}}')
@@ -127,9 +130,9 @@ class CoderAgent(Agent):
                     self.speak("Self-debug: PASS.")
                     break
                 fix_prompt = f"Fix bug: {result} in code: {html[:500]}... Output fixed HTML JSON: {{\"fixed\": \"<html>...\"}}"
-                fixed = await self.generate_response(fix_prompt)
-                html = fixed.get("fixed", html)
-                self.session.set_shared("full_html", html)
+                fixed_json_str = await self.generate_response(fix_prompt)
+                fixed = json.loads(fixed_json_str)  # Parse
+                html = fixed.get("fixed", html)                self.session.set_shared("full_html", html)
                 self.session.add_artifact("index.html", html)
                 self.speak(f"Self-debug iteration {i+1}: Fixed {result}.")
         
@@ -138,7 +141,8 @@ class CoderAgent(Agent):
     async def run_iteration(self, instruction: str, original_vibe: str):
         html = self.session.get_shared("full_html") or ""
         prompt = f"Refine '{instruction}' in: {html}. Output fixed HTML JSON: {{\"fixed\": \"<html>...\"}}"
-        fixed = await self.generate_response(prompt)
+        fixed_json_str = await self.generate_response(prompt)
+        fixed = json.loads(fixed_json_str)  # Parse
         new_html = fixed.get("fixed", html)
         self.session.set_shared("full_html", new_html)
         self.session.add_artifact("index.html", new_html)
