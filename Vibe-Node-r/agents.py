@@ -38,9 +38,15 @@ class Agent:
             system = f"You are a concise {self.role}."
             model = GenerativeModel(model_name, system_instruction=system)
             resp = await model.generate_content_async(prompt)
-            return resp.text.strip()
+            text = resp.text.strip()
+            if not text:  # Handle empty response (e.g., safety block)
+                self.speak("LLM returned empty response – possible safety filter block.")
+                return ""
+            return text
         except Exception as e:
-            return f"API error: {e}"
+            error_msg = f"API error: {e}"
+            self.speak(error_msg)  # Log to chat for debugging
+            return error_msg
 
 # ------------------------------------------------------------------
 # CoderAgent – Guided Generation + Self-Debug Loop
@@ -53,20 +59,35 @@ class CoderAgent(Agent):
         # Pull from shared
         sprites = self.session.get_shared("sprites") or "{}"
         script = self.session.get_shared("script") or "[]"
-        
+    
         # Slim prompt – chunked to avoid truncation
-        head_prompt = f"HTML head for '{vibe}' – title, viewport, style. JSON: {{\"head\": \"<head>...</head>\"}}"
+        head_prompt = f"Output ONLY the JSON object requested, no explanations, code blocks, or extra text. HTML head for '{vibe}' – title, viewport, style. JSON: {{\"head\": \"<head>...</head>\"}}"
         head_json_str = await self.generate_response(head_prompt)
-        head = json.loads(head_json_str).get("head", "")  # Parse JSON, default to empty
-        
-        create_prompt = f"Phaser create() for '{vibe}'. Use sprites: {sprites}. Add controls, score. JSON: {{\"create\": \"this.add...\"}}"
+        self.speak(f"Raw head response: {head_json_str[:200]}...")  # Log snippet for debug
+        try:
+            head = json.loads(head_json_str).get("head", "")
+        except json.JSONDecodeError as e:
+            self.speak(f"JSON parse error on head: {e}")
+            head = ""
+    
+        create_prompt = f"Output ONLY the JSON object requested, no explanations, code blocks, or extra text. Phaser create() for '{vibe}'. Use sprites: {sprites}. Add controls, score. JSON: {{\"create\": \"this.add...\"}}"
         create_json_str = await self.generate_response(create_prompt)
-        create = json.loads(create_json_str).get("create", "")  # Parse
-        
-        update_prompt = f"Phaser update() for '{vibe}'. Game loop, collisions. JSON: {{\"update\": \"if (cursors...\"}}"
+        self.speak(f"Raw create response: {create_json_str[:200]}...")
+        try:
+            create = json.loads(create_json_str).get("create", "")
+        except json.JSONDecodeError as e:
+            self.speak(f"JSON parse error on create: {e}")
+            create = ""
+    
+        update_prompt = f"Output ONLY the JSON object requested, no explanations, code blocks, or extra text. Phaser update() for '{vibe}'. Game loop, collisions. JSON: {{\"update\": \"if (cursors...\"}}"
         update_json_str = await self.generate_response(update_prompt)
-        update = json.loads(update_json_str).get("update", "")
-        
+        self.speak(f"Raw update response: {update_json_str[:200]}...")
+        try:
+            update = json.loads(update_json_str).get("update", "")
+        except json.JSONDecodeError as e:
+            self.speak(f"JSON parse error on update: {e}")
+            update = ""
+    
         # Assemble with .format() – no f-string, no backslash errors
         create_safe = create.replace('\\', '\\\\').replace('{', '{{').replace('}', '}}')
         update_safe = update.replace('\\', '\\\\').replace('{', '{{').replace('}', '}}')
@@ -121,10 +142,15 @@ class CoderAgent(Agent):
             if "[PASS]" in result:
                 self.speak("Self-debug: PASS.")
                 break
-            fix_prompt = f"Fix bug: {result} in code: {html[:500]}... Output fixed HTML JSON: {{\"fixed\": \"<html>...\"}}"
+            fix_prompt = f"Output ONLY the JSON object requested, no explanations, code blocks, or extra text. Fix bug: {result} in code: {html[:500]}... Output fixed HTML JSON: {{\"fixed\": \"<html>...\"}}"
             fixed_json_str = await self.generate_response(fix_prompt)
-            fixed = json.loads(fixed_json_str)  # Parse
-            html = fixed.get("fixed", html)  # Fixed: Separate statements
+            self.speak(f"Raw fix response: {fixed_json_str[:200]}...")
+            try:
+                fixed = json.loads(fixed_json_str)
+                html = fixed.get("fixed", html)
+            except json.JSONDecodeError as e:
+                self.speak(f"JSON parse error on fix: {e}")
+                html = html  # Fallback to original
             self.session.set_shared("full_html", html)
             self.session.add_artifact("index.html", html)
             self.speak(f"Self-debug iteration {i+1}: Fixed {result}.")

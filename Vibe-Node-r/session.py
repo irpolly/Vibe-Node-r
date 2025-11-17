@@ -24,11 +24,13 @@ class Message:
 class Session:
     def __init__(self, session_id: str):
         self.session_id = session_id
+        self.artifact_path = os.path.join(os.path.dirname(__file__), 'artifacts', session_id)  # Or use os.getcwd() if preferred
+        os.makedirs(self.artifact_path, exist_ok=True)
         self.messages: List[Message] = []
         self.artifacts: List[str] = []
         self.shared_state = {}
         self.status = "created"
-        self.root_agent_id = "manager"  # Default to manager as root  
+        self.root_agent_id = "manager" 
         self._prepare_agents()
 
     def set_status(self, status: str):
