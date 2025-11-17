@@ -27,7 +27,8 @@ class Session:
         self.messages: List[Message] = []
         self.artifacts: List[str] = []
         self.shared_state = {}
-        self.status = "created"  
+        self.status = "created"
+        self.root_agent_id = "manager"  # Default to manager as root  
         self._prepare_agents()
 
     def set_status(self, status: str):
@@ -76,7 +77,7 @@ class Session:
                 next(iter(self.agents.keys()), None)
             )
         
-        print(f"Session {self.session_id}: Agents prepared. Root is {self.root_agent_id}")
+        print(f"Session {self.session_id}: Agents prepared.")
 
     def add_message(self, agent_name: str, text: str):
         """Adds a message to the session's log."""

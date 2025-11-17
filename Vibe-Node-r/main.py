@@ -128,7 +128,7 @@ def get_status(session_id):
     Pollable endpoint for the frontend to get the latest status,
     messages, and artifacts from a running session.
     """
-    session = get_session(session_id)
+    session = Session(session_id)
     
     return jsonify({
         "sessionId": session.session_id,
