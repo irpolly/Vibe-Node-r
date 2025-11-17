@@ -34,7 +34,7 @@ class Agent:
 
     async def generate_response(self, prompt: str) -> str:
         try:
-            model_name = self.config.get("llm", "gemini-1.5-flash")
+            model_name = self.config.get("llm", "gemini-2.5-flash")
             system = f"You are a concise {self.role}."
             model = GenerativeModel(model_name, system_instruction=system)
             resp = await model.generate_content_async(prompt)
