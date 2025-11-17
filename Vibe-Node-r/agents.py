@@ -126,7 +126,7 @@ class CoderAgent(Agent):
         tester = next((a for a in self.session.agents.values() if isinstance(a, TesterAgent)), None)
         for i in range(3):
             if tester:
-            result = await tester.run("Debug full_html")
+                result = await tester.run("Debug full_html")
             if "[PASS]" in result:
                 self.speak("Self-debug: PASS.")
                 break
