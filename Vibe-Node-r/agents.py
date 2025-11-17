@@ -122,19 +122,21 @@ class CoderAgent(Agent):
         self.session.add_artifact("index.html", html)
         
         # SELF-DEBUG LOOP
+        # SELF-DEBUG LOOP
         tester = next((a for a in self.session.agents.values() if isinstance(a, TesterAgent)), None)
         for i in range(3):
             if tester:
-                result = await tester.run("Debug full_html")
-                if "[PASS]" in result:
-                    self.speak("Self-debug: PASS.")
-                    break
-                fix_prompt = f"Fix bug: {result} in code: {html[:500]}... Output fixed HTML JSON: {{\"fixed\": \"<html>...\"}}"
-                fixed_json_str = await self.generate_response(fix_prompt)
-                fixed = json.loads(fixed_json_str)  # Parse
-                html = fixed.get("fixed", html)                self.session.set_shared("full_html", html)
-                self.session.add_artifact("index.html", html)
-                self.speak(f"Self-debug iteration {i+1}: Fixed {result}.")
+            result = await tester.run("Debug full_html")
+            if "[PASS]" in result:
+                self.speak("Self-debug: PASS.")
+                break
+            fix_prompt = f"Fix bug: {result} in code: {html[:500]}... Output fixed HTML JSON: {{\"fixed\": \"<html>...\"}}"
+            fixed_json_str = await self.generate_response(fix_prompt)
+            fixed = json.loads(fixed_json_str)  # Parse
+            html = fixed.get("fixed", html)  # Fixed: Separate statements
+            self.session.set_shared("full_html", html)
+            self.session.add_artifact("index.html", html)
+            self.speak(f"Self-debug iteration {i+1}: Fixed {result}.")
         
         self.speak("Code deployed – self-debug complete.")
 
