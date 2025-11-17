@@ -53,31 +53,31 @@ class Session:
         self.shared_state[key] = value
 
         # 1. Instantiate all agents
-        for node in nodes:
-            if node.get('type') == 'agentNode':
-                agent_label = node['data']['label']
-                agent_class = self.AGENT_MAP.get(agent_label, ManagerAgent) # Default to Manager
-                self.agents[node['id']] = agent_class(
-                    node_id=node['id'],
-                    config=node['data'].get('config', {}),
-                    session=self
-                )
+#        for node in nodes:
+#            if node.get('type') == 'agentNode':
+#                agent_label = node['data']['label']
+#                agent_class = self.AGENT_MAP.get(agent_label, ManagerAgent) # Default to Manager
+#                self.agents[node['id']] = agent_class(
+#                    node_id=node['id'],
+#                    config=node['data'].get('config', {}),
+#                    session=self
+#                )
 
         # 2. Find the root agent (connected to the trigger)
-        trigger_node_id = next((n['id'] for n in nodes if n.get('type') == 'triggerNode'), None)
-        if trigger_node_id:
-            root_edge = next((e for e in edges if e['source'] == trigger_node_id), None)
-            if root_edge:
-                self.root_agent_id = root_edge['target']
+#        trigger_node_id = next((n['id'] for n in nodes if n.get('type') == 'triggerNode'), None)
+#        if trigger_node_id:
+#            root_edge = next((e for e in edges if e['source'] == trigger_node_id), None)
+#            if root_edge:
+#                self.root_agent_id = root_edge['target']
         
         # If no explicit root, pick the first available Manager or any agent
-        if not self.root_agent_id:
-            self.root_agent_id = next(
-                (id for id, agent in self.agents.items() if isinstance(agent, ManagerAgent)),
-                next(iter(self.agents.keys()), None)
-            )
+#        if not self.root_agent_id:
+#            self.root_agent_id = next(
+#                (id for id, agent in self.agents.items() if isinstance(agent, ManagerAgent)),
+#                next(iter(self.agents.keys()), None)
+#            )
         
-        print(f"Session {self.session_id}: Agents prepared.")
+#        print(f"Session {self.session_id}: Agents prepared.")
 
     def add_message(self, agent_name: str, text: str):
         """Adds a message to the session's log."""
