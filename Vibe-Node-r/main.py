@@ -11,8 +11,20 @@ import vertexai
 
 # --- App Initialization ---
 app = Flask(__name__, static_folder='build', static_url_path='')
+from mcp_handler import handle_mcp_request
 CORS(app) # Enable Cross-Origin Resource Sharing for local dev
 app.config['ARTIFACT_FOLDER'] = os.path.join(os.getcwd(), 'artifacts')
+
+# Add blueprint for MCP (scalable)
+from flask import Blueprint
+mcp_bp = Blueprint('mcp', __name__, url_prefix='/mcp')
+@mcp_bp.route('/<session_id>/<path:action>', methods=['POST'])
+def mcp_endpoint(session_id, action):
+    return handle_mcp_request(session_id)  # Routes to handler
+
+app.register_blueprint(mcp_bp)  # Mount it
+
+# In /api/run or /api/instruct, pass MCP URL to session if needed
 
 # --- Vertex AI Initialization ---
 # In a Cloud Run environment, project and location can often be inferred.

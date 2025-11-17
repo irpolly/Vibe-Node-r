@@ -10,7 +10,7 @@ vertexai.init(
     location="europe-west4"
 )
 
-from vertexai.generative_models import GenerativeModel
+from vertexai.generative_models import GenerativeModel,Tool, FunctionDeclaration
 
 if TYPE_CHECKING:
     from session import Session
@@ -32,21 +32,51 @@ class Agent:
         print(f"[{self.role}]: {text}")
         self.session.add_message(self.role, text)
 
+
     async def generate_response(self, prompt: str) -> str:
         try:
             model_name = self.config.get("llm", "gemini-2.5-flash")
-            system = f"You are a concise {self.role}."
-            model = GenerativeModel(model_name, system_instruction=system)
-            resp = await model.generate_content_async(prompt)
-            text = resp.text.strip()
-            if not text:  # Handle empty response (e.g., safety block)
-                self.speak("LLM returned empty response – possible safety filter block.")
-                return ""
-            return text
+            system = f"You are a concise {self.role}. Use MCP tools for context/exec: base_url='http://your-cloud-run-url/mcp/{self.session.session_id}'."
+        
+            # Define MCP tools (Gemini calls them automatically)
+            mcp_tool = Tool(
+                function_declarations=[
+                    FunctionDeclaration(
+                        name="fetch_context",
+                        description="Fetch session artifacts via MCP.",
+                        parameters={"type": "object", "properties": {"type": {"type": "string", "enum": ["context_fetch"]}}}
+                    ),
+                    FunctionDeclaration(
+                        name="execute_code",
+                        description="Run code in sandbox via MCP.",
+                        parameters={"type": "object", "properties": {"type": {"type": "string", "enum": ["code_exec"]}, "code": {"type": "string"}}}
+                    )
+                ]
+            )
+        
+            model = GenerativeModel(model_name, system_instruction=system, tools=[mcp_tool])
+            response = await model.generate_content_async(prompt)
+        
+            # Handle tool calls (if Gemini invokes MCP)
+            if response.candidates[0].content.parts[0].function_call:
+                fc = response.candidates[0].content.parts[0].function_call
+                # Simulate MCP call here or defer to handler
+                tool_resp = await self.invoke_mcp_tool(fc.name, fc.args)  # Custom method: POST to /mcp
+                # Feed back to model for iteration
+                full_prompt = f"{prompt}\nTool result: {tool_resp}"
+                return await self.generate_response(full_prompt)  # Recursive for chaining
+        
+            return response.text.strip()
         except Exception as e:
-            error_msg = f"API error: {e}"
-            self.speak(error_msg)  # Log to chat for debugging
-            return error_msg
+            self.speak(f"API error: {e}")
+            return f"Error: {e}"
+
+    async def invoke_mcp_tool(self, name: str, args: dict):
+        # POST to your MCP endpoint
+        import aiohttp
+        async with aiohttp.ClientSession() as sess:
+            async with sess.post(f"http://localhost:5000/mcp/{self.session.session_id}/{name}", json=args) as resp:
+                return await resp.json()
 
 # ------------------------------------------------------------------
 # CoderAgent – Guided Generation + Self-Debug Loop
@@ -91,8 +121,6 @@ class CoderAgent(Agent):
         # Assemble with .format() – no f-string, no backslash errors
         create_safe = create.replace('\\', '\\\\').replace('{', '{{').replace('}', '}}')
         update_safe = update.replace('\\', '\\\\').replace('{', '{{').replace('}', '}}')
-        test_prompt = f"Test this JS logic in Python: {create}. Use code_execution tool."
-        test_result = await self.generate_response(test_prompt)  # Gemini runs + fixes
 
         full_js = (
             "class Play extends Phaser.Scene {{\n"
