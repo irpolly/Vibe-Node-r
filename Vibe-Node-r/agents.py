@@ -91,6 +91,8 @@ class CoderAgent(Agent):
         # Assemble with .format() – no f-string, no backslash errors
         create_safe = create.replace('\\', '\\\\').replace('{', '{{').replace('}', '}}')
         update_safe = update.replace('\\', '\\\\').replace('{', '{{').replace('}', '}}')
+        test_prompt = f"Test this JS logic in Python: {create}. Use code_execution tool."
+        test_result = await self.generate_response(test_prompt)  # Gemini runs + fixes
 
         full_js = (
             "class Play extends Phaser.Scene {{\n"
